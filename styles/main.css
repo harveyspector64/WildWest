@@ -1,0 +1,135 @@
+* { margin:0; padding:0; box-sizing:border-box; }
+body{
+  background:#1a1a1a;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  min-height:100vh;
+  font-family: Georgia, serif;
+  overflow:hidden;
+  user-select:none;
+  -webkit-user-select:none;
+  -webkit-touch-callout:none;
+}
+#gameContainer{ position:relative; }
+canvas{
+  border:4px solid #3d2817;
+  image-rendering:pixelated;
+  image-rendering:crisp-edges;
+  touch-action:none;
+  background:#000;
+}
+
+#ui{
+  position:absolute; top:10px; left:10px;
+  color:#d4a574;
+  font-size:14px;
+  text-shadow:1px 1px 2px black;
+  pointer-events:none;
+  line-height:1.25;
+  width:360px;
+}
+#score{
+  position:absolute; top:10px; right:10px;
+  color:#d4a574;
+  font-size:18px;
+  text-shadow:1px 1px 2px black;
+  text-align:right;
+  pointer-events:none;
+}
+#instructions{
+  position:absolute; bottom:10px; left:10px;
+  color:#8b7355;
+  font-size:12px;
+  text-shadow:1px 1px 2px black;
+  pointer-events:none;
+  max-width:680px;
+  line-height:1.25;
+}
+
+#toggles{
+  position:absolute;
+  top:10px;
+  left:50%;
+  transform:translateX(-50%);
+  display:flex;
+  gap:6px;
+  pointer-events:auto;
+  z-index:5;
+  flex-wrap:wrap;
+  justify-content:center;
+  max-width:640px;
+}
+.toggle{
+  font-family: Georgia, serif;
+  font-size:11px;
+  padding:5px 8px;
+  border-radius:999px;
+  background:rgba(0,0,0,0.28);
+  border:1px solid rgba(255,255,255,0.12);
+  color:#d4a574;
+  cursor:pointer;
+  backdrop-filter: blur(2px);
+  white-space:nowrap;
+}
+.toggle.off{ opacity:0.55; }
+.toggle.hidden{ display:none; }
+.toggle:active{ transform:translateY(1px); }
+
+#message{
+  position:absolute;
+  top:50%; left:50%;
+  transform:translate(-50%, -50%);
+  color:#d4a574;
+  font-size:28px;
+  text-shadow:2px 2px 4px black;
+  text-align:center;
+  pointer-events:none;
+  opacity:0;
+  transition:opacity 0.2s;
+  padding:10px 14px;
+  background:rgba(0,0,0,0.12);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:10px;
+  backdrop-filter: blur(2px);
+  z-index:6;
+  max-width:600px;
+}
+#message.visible{ opacity:1; }
+
+#tensionBar{
+  position:absolute;
+  top:52px;
+  left:50%;
+  transform:translateX(-50%);
+  width:240px;
+  height:8px;
+  background:#333;
+  border:2px solid #5a4a3a;
+  opacity:0;
+  transition:opacity 0.25s;
+  pointer-events:none;
+  z-index:3;
+}
+#tensionBar.visible{ opacity:1; }
+#tensionFill{
+  height:100%;
+  width:0%;
+  background: linear-gradient(to right, #4a3, #aa3, #a33);
+  transition: width 0.07s;
+}
+#enemyType{
+  position:absolute;
+  top:72px;
+  left:50%;
+  transform:translateX(-50%);
+  color:#8b7355;
+  font-size:11px;
+  text-shadow:1px 1px 2px black;
+  opacity:0;
+  transition:opacity 0.25s;
+  pointer-events:none;
+  white-space:nowrap;
+  z-index:3;
+}
+#enemyType.visible{ opacity:1; }

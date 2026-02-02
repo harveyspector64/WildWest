@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Cowboy Game Prototype</title>
+  <link rel="stylesheet" href="styles/main.css" />
+</head>
+<body>
+  <div id="gameContainer">
+    <canvas id="game" width="640" height="480"></canvas>
+
+    <div id="toggles">
+      <button id="btnScene" class="toggle">Scene: DUEL</button>
+      <button id="btnHolster" class="toggle">Holster (Q)</button>
+      <button id="btnPractice" class="toggle off">Practice: OFF</button>
+      <button id="btnEnemy" class="toggle">Enemy: ON</button>
+      <button id="btnMatch" class="toggle">Match: FT3</button>
+      <button id="btnDebug" class="toggle off">Debug: OFF</button>
+    </div>
+
+    <div id="ui">
+      <div id="status">...</div>
+      <div id="substatus"></div>
+      <div id="round"></div>
+    </div>
+
+    <div id="score">
+      <div id="scoreText">YOU 0 - 0 THEM</div>
+      <div id="firstTo">First to 3</div>
+    </div>
+
+    <div id="instructions"></div>
+
+    <div id="tensionBar"><div id="tensionFill"></div></div>
+    <div id="enemyType"></div>
+    <div id="message"></div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
