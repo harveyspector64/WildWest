@@ -1,0 +1,3255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Cowboy Game Prototype</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body{
+      background:#1a1a1a;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      min-height:100vh;
+      font-family: Georgia, serif;
+      overflow:hidden;
+      user-select:none;
+      -webkit-user-select:none;
+      -webkit-touch-callout:none;
+    }
+    #gameContainer{ position:relative; }
+    canvas{
+      border:4px solid #3d2817;
+      image-rendering:pixelated;
+      image-rendering:crisp-edges;
+      touch-action:none;
+      background:#000;
+    }
+
+    #ui{
+      position:absolute; top:10px; left:10px;
+      color:#d4a574;
+      font-size:14px;
+      text-shadow:1px 1px 2px black;
+      pointer-events:none;
+      line-height:1.25;
+      width:360px;
+    }
+    #score{
+      position:absolute; top:10px; right:10px;
+      color:#d4a574;
+      font-size:18px;
+      text-shadow:1px 1px 2px black;
+      text-align:right;
+      pointer-events:none;
+    }
+    #instructions{
+      position:absolute; bottom:10px; left:10px;
+      color:#8b7355;
+      font-size:12px;
+      text-shadow:1px 1px 2px black;
+      pointer-events:none;
+      max-width:680px;
+      line-height:1.25;
+    }
+
+    #toggles{
+      position:absolute;
+      top:10px;
+      left:50%;
+      transform:translateX(-50%);
+      display:flex;
+      gap:6px;
+      pointer-events:auto;
+      z-index:5;
+      flex-wrap:wrap;
+      justify-content:center;
+      max-width:640px;
+    }
+    .toggle{
+      font-family: Georgia, serif;
+      font-size:11px;
+      padding:5px 8px;
+      border-radius:999px;
+      background:rgba(0,0,0,0.28);
+      border:1px solid rgba(255,255,255,0.12);
+      color:#d4a574;
+      cursor:pointer;
+      backdrop-filter: blur(2px);
+      white-space:nowrap;
+    }
+    .toggle.off{ opacity:0.55; }
+    .toggle.hidden{ display:none; }
+    .toggle:active{ transform:translateY(1px); }
+
+    #message{
+      position:absolute;
+      top:50%; left:50%;
+      transform:translate(-50%, -50%);
+      color:#d4a574;
+      font-size:28px;
+      text-shadow:2px 2px 4px black;
+      text-align:center;
+      pointer-events:none;
+      opacity:0;
+      transition:opacity 0.2s;
+      padding:10px 14px;
+      background:rgba(0,0,0,0.12);
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:10px;
+      backdrop-filter: blur(2px);
+      z-index:6;
+      max-width:600px;
+    }
+    #message.visible{ opacity:1; }
+
+    #tensionBar{
+      position:absolute;
+      top:52px;
+      left:50%;
+      transform:translateX(-50%);
+      width:240px;
+      height:8px;
+      background:#333;
+      border:2px solid #5a4a3a;
+      opacity:0;
+      transition:opacity 0.25s;
+      pointer-events:none;
+      z-index:3;
+    }
+    #tensionBar.visible{ opacity:1; }
+    #tensionFill{
+      height:100%;
+      width:0%;
+      background: linear-gradient(to right, #4a3, #aa3, #a33);
+      transition: width 0.07s;
+    }
+    #enemyType{
+      position:absolute;
+      top:72px;
+      left:50%;
+      transform:translateX(-50%);
+      color:#8b7355;
+      font-size:11px;
+      text-shadow:1px 1px 2px black;
+      opacity:0;
+      transition:opacity 0.25s;
+      pointer-events:none;
+      white-space:nowrap;
+      z-index:3;
+    }
+    #enemyType.visible{ opacity:1; }
+  </style>
+</head>
+<body>
+  <div id="gameContainer">
+    <canvas id="game" width="640" height="480"></canvas>
+
+    <div id="toggles">
+      <button id="btnScene" class="toggle">Scene: DUEL</button>
+      <button id="btnHolster" class="toggle">Holster (Q)</button>
+      <button id="btnPractice" class="toggle off">Practice: OFF</button>
+      <button id="btnEnemy" class="toggle">Enemy: ON</button>
+      <button id="btnMatch" class="toggle">Match: FT3</button>
+      <button id="btnDebug" class="toggle off">Debug: OFF</button>
+    </div>
+
+    <div id="ui">
+      <div id="status">...</div>
+      <div id="substatus"></div>
+      <div id="round"></div>
+    </div>
+
+    <div id="score">
+      <div id="scoreText">YOU 0 - 0 THEM</div>
+      <div id="firstTo">First to 3</div>
+    </div>
+
+    <div id="instructions"></div>
+
+    <div id="tensionBar"><div id="tensionFill"></div></div>
+    <div id="enemyType"></div>
+    <div id="message"></div>
+  </div>
+
+<script>
+(() => {
+  // =========================================================
+  // DOM
+  // =========================================================
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+
+  const statusEl = document.getElementById('status');
+  const subStatusEl = document.getElementById('substatus');
+  const roundEl = document.getElementById('round');
+
+  const scoreWrap = document.getElementById('score');
+  const scoreEl = document.getElementById('scoreText');
+  const firstToEl = document.getElementById('firstTo');
+
+  const instructionsEl = document.getElementById('instructions');
+
+  const messageEl = document.getElementById('message');
+
+  const tensionBar = document.getElementById('tensionBar');
+  const tensionFill = document.getElementById('tensionFill');
+  const enemyTypeEl = document.getElementById('enemyType');
+
+  const btnScene = document.getElementById('btnScene');
+  const btnHolster = document.getElementById('btnHolster');
+  const btnPractice = document.getElementById('btnPractice');
+  const btnEnemy = document.getElementById('btnEnemy');
+  const btnMatch = document.getElementById('btnMatch');
+  const btnDebug = document.getElementById('btnDebug');
+
+  // =========================================================
+  // Helpers
+  // =========================================================
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const randInt = (a, b) => Math.floor(rand(a, b + 1));
+  const sign = (v) => (v < 0 ? -1 : 1);
+
+  function ms(sec) {
+    if (sec == null || !isFinite(sec)) return '—';
+    return `${Math.round(sec * 1000)}ms`;
+  }
+
+  function distPointToSegment(px, py, x1, y1, x2, y2) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    if (dx === 0 && dy === 0) return Math.hypot(px - x1, py - y1);
+    const t = ((px - x1) * dx + (py - y1) * dy) / (dx*dx + dy*dy);
+    const tt = clamp(t, 0, 1);
+    const cx = x1 + tt * dx;
+    const cy = y1 + tt * dy;
+    return Math.hypot(px - cx, py - cy);
+  }
+
+  function randomInDisc(radius) {
+    const a = Math.random() * Math.PI * 2;
+    const r = Math.sqrt(Math.random()) * radius;
+    return { x: Math.cos(a) * r, y: Math.sin(a) * r };
+  }
+
+  function isTouchLike() {
+    return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  }
+
+  // =========================================================
+  // Global flags
+  // =========================================================
+  const Flags = {
+    practice: false,
+    enemyAI: true,
+    debug: false
+  };
+
+  const MatchSettings = {
+    targets: [3, 5, 7, 10, Infinity],
+    idx: 0
+  };
+
+  function matchLabel() {
+    const t = MatchSettings.targets[MatchSettings.idx];
+    return (t === Infinity) ? '∞' : `FT${t}`;
+  }
+
+  // =========================================================
+  // Input
+  // =========================================================
+  const Input = {
+    keys: new Set(),
+    drawHeld: false,
+    suppressNextRelease: false,
+    pointer: { x: canvas.width/2, y: canvas.height/2, down: false, id: null }
+  };
+
+  function showMessage(html) {
+    messageEl.innerHTML = html;
+    messageEl.classList.add('visible');
+  }
+  function hideMessage() {
+    messageEl.classList.remove('visible');
+  }
+
+  function setDrawHeld(held) {
+    if (Input.drawHeld === held) return;
+    Input.drawHeld = held;
+
+    const scene = SceneManager.current;
+    if (!scene) return;
+
+    if (held) scene.onDrawPress?.();
+    else scene.onDrawRelease?.();
+  }
+
+  function requestHolster() {
+    const scene = SceneManager.current;
+    if (!scene) return;
+
+    // Prevent Q while holding from also firing on the release event.
+    Input.suppressNextRelease = true;
+    setDrawHeld(false);
+    scene.onHolsterToggle?.();
+  }
+
+  document.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if (e.code === 'Space') e.preventDefault();
+
+    if (!e.repeat && e.key === 'Tab') {
+      e.preventDefault();
+      SceneManager.nextScene();
+      return;
+    }
+
+    if (!e.repeat && k === 'q') requestHolster();
+    if (!e.repeat && k === 'p') togglePractice();
+    if (!e.repeat && k === 'e') toggleEnemy();
+    if (!e.repeat && k === 'h') toggleDebug();
+    if (!e.repeat && k === 'm') cycleMatch();
+    if (!e.repeat && k === 'r') SceneManager.current?.reset?.();
+    if (!e.repeat && k === 'n') SceneManager.current?.newMatch?.();
+    if (!e.repeat && k === 'f') SceneManager.current?.onFlipEnemyFacing?.();
+
+    if (e.code === 'Space' && !e.repeat) setDrawHeld(true);
+
+    Input.keys.add(k);
+  }, { passive:false });
+
+  document.addEventListener('keyup', (e) => {
+    const k = e.key.toLowerCase();
+    if (e.code === 'Space') {
+      e.preventDefault();
+      setDrawHeld(false);
+    }
+    Input.keys.delete(k);
+  }, { passive:false });
+
+  canvas.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    if (Input.pointer.id !== null) return;
+    Input.pointer.id = e.pointerId;
+    Input.pointer.down = true;
+    updatePointerPos(e);
+    try { canvas.setPointerCapture(Input.pointer.id); } catch {}
+    setDrawHeld(true);
+  }, { passive:false });
+
+  canvas.addEventListener('pointermove', (e) => {
+    updatePointerPos(e);
+  });
+
+  canvas.addEventListener('pointerup', (e) => {
+    e.preventDefault();
+    if (e.pointerId !== Input.pointer.id) return;
+    Input.pointer.id = null;
+    Input.pointer.down = false;
+    updatePointerPos(e);
+    setDrawHeld(false);
+  }, { passive:false });
+
+  canvas.addEventListener('pointercancel', () => {
+    Input.pointer.id = null;
+    Input.pointer.down = false;
+    setDrawHeld(false);
+  });
+
+  function updatePointerPos(e) {
+    const r = canvas.getBoundingClientRect();
+    Input.pointer.x = clamp((e.clientX - r.left) * (canvas.width / r.width), 0, canvas.width);
+    Input.pointer.y = clamp((e.clientY - r.top) * (canvas.height / r.height), 0, canvas.height);
+  }
+
+  // =========================================================
+  // Sprites
+  // =========================================================
+  const sprites = {};
+  const spriteConfigManual = {
+    'cowboy1_draw-Sheet.png': { fw: 32, fh: 32, frames: 10 },
+    'cowboy1_ONLYshooting(nodraw)-Sheet.png': { fw: 32, fh: 32, frames: 5 },
+    'cowboy1_walk.png': { fw: 32, fh: 32, frames: 16 },
+    'cowboy1_rotate_all_standing.png': { fw: 32, fh: 32, frames: 4 },
+    'cowboy1_die.png': { fw: 32, fh: 32, frames: 14 },
+
+    'cowboy2_draw-Sheet.png': { fw: 32, fh: 32, frames: 9 },
+    'cowboy2_shootOnly-Sheet.png': { fw: 32, fh: 32, frames: 13 },
+    'cowboy2_death-Sheet.png': { fw: 32, fh: 32, frames: 9 },
+
+    'trees1-Sheet.png': { fw: 64, fh: 80, frames: 15 },
+
+    'duck1_fly-Sheet.png': { fw: 32, fh: 32, frames: 6 },
+    'duck1_rotate-Sheet.png': { fw: 32, fh: 32, frames: 6 },
+    'duck1shot-Sheet.png': { fw: 32, fh: 32, frames: 6 },
+  };
+
+  const spriteList = [
+    // Cowboys
+    'cowboy1_draw-Sheet.png',
+    'cowboy1_ONLYshooting(nodraw)-Sheet.png',
+    'cowboy1_walk.png',
+    'cowboy1_rotate_all_standing.png',
+    'cowboy1_die.png',
+
+    'cowboy2_draw-Sheet.png',
+    'cowboy2_shootOnly-Sheet.png',
+    'cowboy2_death-Sheet.png',
+
+    // Cowboy 3 optional
+    'cowboy3_death-Sheet.png',
+    'cowboy3_hit-Sheet.png',
+    'cowboy3_fire-Sheet.png',
+    'cowboy3_rotate-Sheet.png',
+    'cowboy3_drawonly.png',
+
+    // Environment
+    'trees1-Sheet.png',
+    'bestbackground_west1.png',
+
+    // Duck hunt
+    'duck1_fly-Sheet.png',
+    'duck1shot-Sheet.png',
+    'duck1_rotate-Sheet.png',
+    'ducklogo1.png',
+  ];
+
+  function spriteOk(name) {
+    const img = sprites[name];
+    return !!(img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0);
+  }
+
+  function getCfg(name, fallbackFw = 32, fallbackFh = 32) {
+    if (spriteConfigManual[name]) return spriteConfigManual[name];
+    const img = sprites[name];
+    if (!spriteOk(name)) return { fw: fallbackFw, fh: fallbackFh, frames: 1 };
+
+    if (img.naturalWidth % fallbackFw === 0) {
+      return { fw: fallbackFw, fh: fallbackFh, frames: Math.max(1, Math.floor(img.naturalWidth / fallbackFw)) };
+    }
+    if (img.naturalWidth % img.naturalHeight === 0) {
+      const fw = img.naturalHeight;
+      return { fw, fh: img.naturalHeight, frames: Math.max(1, Math.floor(img.naturalWidth / fw)) };
+    }
+    return { fw: img.naturalWidth, fh: img.naturalHeight, frames: 1 };
+  }
+
+  function drawSpriteFrame(name, frame, sx, sy, scaleX = 1, scaleY = 1, alpha = 1) {
+    if (!spriteOk(name)) return;
+    const img = sprites[name];
+    const cfg = getCfg(name);
+
+    const f = clamp(frame, 0, cfg.frames - 1);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(sx, sy);
+    ctx.scale(scaleX, scaleY);
+    ctx.drawImage(
+      img,
+      f * cfg.fw, 0,
+      cfg.fw, cfg.fh,
+      -cfg.fw / 2, -cfg.fh / 2,
+      cfg.fw, cfg.fh
+    );
+    ctx.restore();
+  }
+
+  // =========================================================
+  // Aim model
+  // =========================================================
+  const AimModel = {
+    spreadStart: 34,
+    spreadMin: 6,
+    stabilize: 0.34,
+    fatigueStart: 0.95,
+    fatigueRamp: 0.85,
+    fatigueMax: 24,
+    driftFactor: 0.30,
+
+    spread(now, aimStartAt) {
+      if (aimStartAt == null) return this.spreadStart;
+      const aimTime = Math.max(0, now - aimStartAt);
+
+      const t1 = clamp(aimTime / this.stabilize, 0, 1);
+      let s = lerp(this.spreadStart, this.spreadMin, t1);
+
+      if (aimTime > this.fatigueStart) {
+        const t2 = clamp((aimTime - this.fatigueStart) / this.fatigueRamp, 0, 1);
+        s = lerp(this.spreadMin, this.fatigueMax, t2);
+      }
+      return s;
+    },
+
+    approxHitChance(hitRadius, spread) {
+      if (spread <= 0) return 1;
+      if (spread <= hitRadius) return 1;
+      return clamp((hitRadius * hitRadius) / (spread * spread), 0, 1);
+    },
+
+    crosshairCenter(now, baseX, baseY, spread, seed1, seed2) {
+      const driftAmp = spread * this.driftFactor;
+      const t = now;
+
+      const sx = Math.sin(t * 7.2 + seed1) + Math.sin(t * 12.8 + seed2) * 0.6;
+      const sy = Math.cos(t * 6.4 + seed2) + Math.sin(t * 10.6 + seed1) * 0.5;
+
+      return {
+        x: baseX + sx * driftAmp * 0.35,
+        y: baseY + sy * driftAmp * 0.22
+      };
+    }
+  };
+
+  // =========================================================
+  // Scene Manager
+  // =========================================================
+  const SceneManager = {
+    scenes: {},
+    order: ['duel', 'overworld', 'duckhunt'],
+    idx: 0,
+    currentName: 'duel',
+    current: null,
+
+    add(name, scene) { this.scenes[name] = scene; },
+
+    switchTo(name) {
+      if (!this.scenes[name]) return;
+      this.current?.onExit?.();
+      this.current = this.scenes[name];
+      this.currentName = name;
+      this.current?.onEnter?.();
+      setSceneUI(name);
+    },
+
+    nextScene() {
+      this.idx = (this.idx + 1) % this.order.length;
+      this.switchTo(this.order[this.idx]);
+    }
+  };
+
+  // =========================================================
+  // UI toggles + instructions
+  // =========================================================
+  function updateToggleButtons() {
+    btnScene.textContent = `Scene: ${SceneManager.currentName.toUpperCase()}`;
+
+    const s = SceneManager.currentName;
+    btnHolster.textContent = (s === 'duckhunt') ? 'Cancel Aim (Q)' : 'Holster (Q)';
+
+    btnPractice.textContent = `Practice: ${Flags.practice ? 'ON' : 'OFF'}`;
+    btnPractice.classList.toggle('off', !Flags.practice);
+
+    btnEnemy.textContent = `Enemy: ${Flags.enemyAI ? 'ON' : 'OFF'}`;
+    btnEnemy.classList.toggle('off', !Flags.enemyAI);
+
+    btnMatch.textContent = `Match: ${matchLabel()}`;
+
+    btnDebug.textContent = `Debug: ${Flags.debug ? 'ON' : 'OFF'}`;
+    btnDebug.classList.toggle('off', !Flags.debug);
+  }
+
+  function updateInstructions() {
+    const touch = isTouchLike();
+    const s = SceneManager.currentName;
+
+    if (s === 'duel') {
+      instructionsEl.innerHTML = touch
+        ? `DUEL — HOLD on game to draw/steady • RELEASE to shoot • Q holster • F flip enemy if needed • TAB scene<br>P practice • E enemy • M match • H debug • R reset • N new match`
+        : `DUEL — HOLD SPACE to draw/steady • RELEASE to shoot • Q holster • F flip enemy if needed • TAB scene<br>P practice • E enemy • M match • H debug • R reset • N new match`;
+    } else if (s === 'overworld') {
+      instructionsEl.innerHTML = touch
+        ? `OVERWORLD — drag aim • hold/release to shoot • Q holster • TAB scene<br>(keyboard: WASD/Arrows move) • gun flips while moving • H debug • R reset • N regen`
+        : `OVERWORLD — WASD/Arrows move • HOLD SPACE aim • RELEASE shoot • Q holster • TAB scene<br>Gun flips while moving • H debug • R reset • N regen`;
+    } else {
+      instructionsEl.innerHTML = touch
+        ? `DUCK HUNT — HOLD to steady • RELEASE to shoot • Q cancel • TAB scene<br>3 shots then reload • H debug • R reset`
+        : `DUCK HUNT — HOLD SPACE to steady • RELEASE to shoot • Q cancel • TAB scene<br>3 shots then reload • H debug • R reset`;
+    }
+  }
+
+  function setSceneUI(sceneName) {
+    hideMessage();
+
+    const isDuel = (sceneName === 'duel');
+
+    scoreWrap.style.display = isDuel ? 'block' : 'none';
+    tensionBar.style.display = isDuel ? 'block' : 'none';
+    enemyTypeEl.style.display = isDuel ? 'block' : 'none';
+
+    btnEnemy.classList.toggle('hidden', !isDuel);
+    btnMatch.classList.toggle('hidden', !isDuel);
+
+    updateToggleButtons();
+    updateInstructions();
+  }
+
+  btnScene.addEventListener('click', () => SceneManager.nextScene());
+  btnHolster.addEventListener('click', () => requestHolster());
+  btnPractice.addEventListener('click', () => togglePractice());
+  btnEnemy.addEventListener('click', () => toggleEnemy());
+  btnMatch.addEventListener('click', () => cycleMatch());
+  btnDebug.addEventListener('click', () => toggleDebug());
+
+  function togglePractice() {
+    Flags.practice = !Flags.practice;
+    SceneManager.current?.reset?.();
+    updateToggleButtons();
+  }
+  function toggleEnemy() {
+    Flags.enemyAI = !Flags.enemyAI;
+    SceneManager.current?.reset?.();
+    updateToggleButtons();
+  }
+  function toggleDebug() {
+    Flags.debug = !Flags.debug;
+    updateToggleButtons();
+  }
+  function cycleMatch() {
+    MatchSettings.idx = (MatchSettings.idx + 1) % MatchSettings.targets.length;
+    SceneManager.current?.onMatchChanged?.();
+    updateToggleButtons();
+  }
+
+  // =========================================================
+  // Scene: DUEL
+  // =========================================================
+  class DuelScene {
+    constructor() {
+      this.GO_MIN = 1.5;
+      this.GO_MAX = 3.8;
+
+      this.BULLET_SPEED = 900;
+      this.BULLET_TRAIL = 0.016;
+
+      this.HIT_RADIUS = 16;
+
+      this.GO_BANNER_TIME = 0.70;
+      this.TIE_EPS = 0.045;
+
+      this.shakeAmount = 0;
+      this.shakeDuration = 0;
+      this.flashAlpha = 0;
+
+      this.playerScore = 0;
+      this.enemyScore = 0;
+
+      this.bullets = [];
+      this.blood = [];
+      this.dust = [];
+      this.tumbleweeds = [];
+
+      this.trees = [];
+      this.mesas = [];
+      this.groundPatches = [];
+
+      // ---- IMPORTANT: baseFacing defines how the ART is drawn by default.
+      // +1 means the sprite sheet is drawn facing RIGHT.
+      // -1 means the sprite sheet is drawn facing LEFT.
+      this.PLAYER_BASE_FACING = +1; // your cowboy1 art faces right
+
+      // Per-skin override memory (press F)
+      this.enemyFacingOverrides = {}; // skinId -> +1/-1 multiplier
+
+      this.personalities = [
+        // lowered accuracy a bit so it doesn’t feel like lasers
+        { name:'Nervous',   reactionMin:0.16, reactionMax:0.46, drawSpeed:0.055, aimMin:0.10, aimMax:0.30, accuracy:0.50, falseStartChance:0.030, flinchChance:0.25 },
+        { name:'Steady',    reactionMin:0.18, reactionMax:0.46, drawSpeed:0.050, aimMin:0.14, aimMax:0.36, accuracy:0.62, falseStartChance:0.010, flinchChance:0.08 },
+        { name:'Veteran',   reactionMin:0.10, reactionMax:0.30, drawSpeed:0.045, aimMin:0.22, aimMax:0.50, accuracy:0.78, falseStartChance:0.000, flinchChance:0.00 },
+        { name:'Quickdraw', reactionMin:0.06, reactionMax:0.20, drawSpeed:0.040, aimMin:0.06, aimMax:0.18, accuracy:0.66, falseStartChance:0.012, flinchChance:0.02 },
+        { name:'Wild',      reactionMin:0.00, reactionMax:0.36, drawSpeed:0.050, aimMin:0.00, aimMax:0.16, accuracy:0.45, falseStartChance:0.080, flinchChance:0.12 },
+      ];
+      this.currentPersonality = this.personalities[0];
+
+      this.enemySkin = null;
+
+      this.player = this.makePlayer();
+      this.enemy = this.makeEnemy();
+
+      this.round = {
+        state: 'standoff',
+        startPerf: 0,
+        time: 0,
+        goTime: 0,
+        goFired: false,
+        goAt: 0,
+        goBannerUntil: 0,
+        result: null,
+        reason: ''
+      };
+    }
+
+    makePlayer() {
+      return {
+        x: 170, y: 320,
+        state: 'idle', // idle | drawing | aiming | shooting | holstering | dead
+        frame: 0, frameTime: 0,
+        drawSpeed: 0.030,
+        health: 100,
+        hasShot: false,
+        releaseQueued: false,
+        aimStartAt: null,
+        aimSeed1: Math.random()*10,
+        aimSeed2: Math.random()*10,
+        metrics: { drewAt:null, drawnAt:null, shotAt:null },
+        deadAt: null,
+        hitFlash: 0
+      };
+    }
+
+    makeEnemy() {
+      return {
+        x: 470, y: 320,
+        state: 'idle',
+        frame: 0, frameTime: 0,
+        drawSpeed: 0.05,
+        health: 100,
+        hasShot: false,
+        aimStartAt: null,
+        metrics: { drewAt:null, drawnAt:null, shotAt:null },
+        deadAt: null,
+        hitFlash: 0,
+        ai: {
+          drawAt: null,
+          fireAt: null,
+          plannedAimDelay: 0,
+          flinchUntil: 0,
+          flinched: false
+        }
+      };
+    }
+
+    onEnter() {
+      this.generateEnvironment();
+      this.initDust();
+      this.reset(true);
+    }
+    onExit() {}
+
+    onFlipEnemyFacing() {
+      if (!this.enemySkin) return;
+      const id = this.enemySkin.id;
+      const cur = this.enemyFacingOverrides[id] ?? 1;
+      this.enemyFacingOverrides[id] = -cur;
+
+      // tiny feedback
+      if (Flags.debug) {
+        showMessage(`Enemy facing flipped for <b>${this.enemySkin.label}</b><br><small>(press R to continue)</small>`);
+        setTimeout(() => { if (this.round.state !== 'over') hideMessage(); }, 600);
+      }
+    }
+
+    onMatchChanged() {
+      this.updateScoreUI();
+    }
+
+    roundNowSeconds() {
+      return (performance.now() - this.round.startPerf) / 1000;
+    }
+
+    matchTarget() {
+      return MatchSettings.targets[MatchSettings.idx];
+    }
+
+    isMatchOver() {
+      const t = this.matchTarget();
+      if (t === Infinity) return false;
+      return (this.playerScore >= t || this.enemyScore >= t);
+    }
+
+    availableEnemySkins() {
+      const skins = [];
+
+      // cowboy2
+      if (spriteOk('cowboy2_draw-Sheet.png') && spriteOk('cowboy2_shootOnly-Sheet.png') && spriteOk('cowboy2_death-Sheet.png')) {
+        skins.push({
+          id: 'cowboy2',
+          label: 'Black Hat',
+          baseFacing: -1, // IMPORTANT: cowboy2 art faces LEFT by default (per your pipeline)
+          draw: 'cowboy2_draw-Sheet.png',
+          shoot: 'cowboy2_shootOnly-Sheet.png',
+          death: 'cowboy2_death-Sheet.png'
+        });
+      }
+
+      // cowboy3 (optional) — baseFacing unknown; default -1 but press F if needed
+      const c3DrawCandidates = ['cowboy3_draw-Sheet.png','cowboy3_drawonly.png','cowboy3_rotate-Sheet.png'];
+      const c3Draw = c3DrawCandidates.find(spriteOk);
+      if (c3Draw && spriteOk('cowboy3_fire-Sheet.png') && spriteOk('cowboy3_death-Sheet.png')) {
+        skins.push({
+          id: 'cowboy3',
+          label: 'Outlaw',
+          baseFacing: +1,
+          draw: c3Draw,
+          shoot: 'cowboy3_fire-Sheet.png',
+          death: 'cowboy3_death-Sheet.png'
+        });
+      }
+
+      if (skins.length === 0) {
+        skins.push({
+          id: 'cowboy2',
+          label: 'Black Hat',
+          baseFacing: -1,
+          draw: 'cowboy2_draw-Sheet.png',
+          shoot: 'cowboy2_shootOnly-Sheet.png',
+          death: 'cowboy2_death-Sheet.png'
+        });
+      }
+
+      return skins;
+    }
+
+    pickPersonality() {
+      let pool = [...this.personalities];
+      const rounds = this.playerScore + this.enemyScore;
+      const ramp = Math.min(rounds * 0.008, 0.10);
+
+      if (this.playerScore > this.enemyScore) pool = pool.concat(this.personalities.slice(2));
+
+      const base = pool[randInt(0, pool.length - 1)];
+      return {
+        ...base,
+        reactionMin: Math.max(0, base.reactionMin - ramp),
+        reactionMax: Math.max(base.reactionMin, base.reactionMax - ramp),
+        accuracy: clamp(base.accuracy + ramp * 0.5, 0.10, 0.92)
+      };
+    }
+
+    newMatch() {
+      this.playerScore = 0;
+      this.enemyScore = 0;
+      this.reset(true);
+    }
+
+    reset(isNewMatch = false) {
+      if (!isNewMatch && this.isMatchOver()) return;
+
+      this.currentPersonality = this.pickPersonality();
+
+      // choose enemy skin per round
+      const skins = this.availableEnemySkins();
+      this.enemySkin = skins[randInt(0, skins.length - 1)];
+
+      this.round.state = 'standoff';
+      this.round.startPerf = performance.now();
+      this.round.time = 0;
+      this.round.goTime = rand(this.GO_MIN, this.GO_MAX);
+      this.round.goFired = false;
+      this.round.goAt = 0;
+      this.round.goBannerUntil = 0;
+      this.round.result = null;
+      this.round.reason = '';
+
+      this.bullets.length = 0;
+      this.blood.length = 0;
+      this.tumbleweeds.length = 0;
+
+      this.shakeAmount = 0;
+      this.shakeDuration = 0;
+      this.flashAlpha = 0;
+
+      this.player = this.makePlayer();
+      this.enemy = this.makeEnemy();
+      this.enemy.drawSpeed = this.currentPersonality.drawSpeed;
+
+      tensionFill.style.width = '0%';
+      tensionBar.classList.remove('visible');
+      enemyTypeEl.classList.remove('visible');
+      hideMessage();
+
+      // practice: instantly enter duel
+      if (Flags.practice) {
+        const now = this.roundNowSeconds();
+        this.forceGoNow(now);
+      }
+
+      this.updateScoreUI();
+    }
+
+    forceGoNow(now) {
+      this.round.goFired = true;
+      this.round.state = 'duel';
+      this.round.goAt = now;
+      this.round.goTime = now;
+      this.round.goBannerUntil = 0;
+      tensionBar.classList.remove('visible');
+
+      enemyTypeEl.textContent = `${this.enemySkin.label} • ${this.currentPersonality.name}${Flags.practice ? ' (practice)' : ''}`;
+      enemyTypeEl.classList.add('visible');
+
+      if (Flags.enemyAI) this.scheduleEnemyFromGo(now);
+      else {
+        this.enemy.ai.drawAt = null;
+        this.enemy.ai.fireAt = null;
+      }
+    }
+
+    scheduleEnemyFromGo(now) {
+      const p = this.currentPersonality;
+      let reactionDelay = rand(p.reactionMin, p.reactionMax);
+
+      this.enemy.ai.flinched = false;
+      this.enemy.ai.flinchUntil = 0;
+
+      if (Math.random() < p.flinchChance) {
+        this.enemy.ai.flinched = true;
+        const extra = rand(0.10, 0.26);
+        this.enemy.ai.flinchUntil = now + rand(0.20, 0.45);
+        reactionDelay += extra;
+      }
+
+      this.enemy.ai.drawAt = this.round.goAt + reactionDelay;
+      this.enemy.ai.fireAt = null;
+      this.enemy.ai.plannedAimDelay = 0;
+    }
+
+    // ---------------------------------------------------------
+    // Facing helpers (THIS fixes your duel flip problem)
+    // ---------------------------------------------------------
+    desiredFacingToward(a, b) {
+      // face toward target b
+      return sign(b.x - a.x);
+    }
+
+    enemyScaleX(desiredFacing) {
+      const base = this.enemySkin?.baseFacing ?? -1;
+      const override = this.enemyFacingOverrides[this.enemySkin?.id] ?? 1;
+      return desiredFacing * base * override;
+    }
+
+    playerScaleX(desiredFacing) {
+      return desiredFacing * this.PLAYER_BASE_FACING;
+    }
+
+    muzzleOffsetX(desiredFacing) {
+      return desiredFacing * 25;
+    }
+
+    // --------------------
+    // Input hooks
+    // --------------------
+    onDrawPress() {
+      if (this.round.state === 'over') return;
+      if (this.isMatchOver()) return;
+
+      const now = this.roundNowSeconds();
+
+      if (Flags.practice && this.round.state !== 'duel') {
+        this.forceGoNow(now);
+      }
+
+      if (!Flags.practice && !this.round.goFired && now >= this.round.goTime) {
+        this.triggerGo(now);
+      }
+
+      // False start
+      if (!Flags.practice && !this.round.goFired && this.round.state === 'standoff') {
+        this.endRound('lost', 'FALSE START');
+        return;
+      }
+
+      if (this.round.state !== 'duel') return;
+
+      if (this.player.state === 'idle') {
+        this.startPlayerDraw(now);
+        return;
+      }
+
+      if (this.player.state === 'aiming' && !this.player.hasShot) {
+        if (this.player.aimStartAt == null) this.player.aimStartAt = now;
+      }
+    }
+
+    onDrawRelease() {
+      if (Input.suppressNextRelease) {
+        Input.suppressNextRelease = false;
+        return;
+      }
+
+      if (this.round.state !== 'duel') return;
+      if (this.round.state === 'over') return;
+
+      const now = this.roundNowSeconds();
+
+      if (this.player.state === 'drawing' && !this.player.hasShot) {
+        this.player.releaseQueued = true;
+        return;
+      }
+
+      if (this.player.state === 'aiming' && !this.player.hasShot && this.player.health > 0 && this.enemy.health > 0) {
+        this.firePlayerShot(now, 'release');
+      }
+    }
+
+    onHolsterToggle() {
+      if (this.player.state === 'dead' || this.player.state === 'shooting') return;
+
+      const drawCfg = getCfg('cowboy1_draw-Sheet.png');
+
+      if (this.player.state === 'aiming') {
+        this.player.state = 'holstering';
+        this.player.frame = drawCfg.frames - 1;
+        this.player.frameTime = 0;
+        this.player.releaseQueued = false;
+        this.player.aimStartAt = null;
+        return;
+      }
+
+      if (this.player.state === 'drawing') {
+        this.player.state = 'holstering';
+        this.player.frameTime = 0;
+        this.player.releaseQueued = false;
+        this.player.aimStartAt = null;
+        return;
+      }
+    }
+
+    // --------------------
+    // Round flow
+    // --------------------
+    triggerGo(now) {
+      if (this.round.goFired) return;
+
+      this.round.goFired = true;
+      this.round.state = 'duel';
+      this.round.goAt = this.round.goTime;
+      this.round.goBannerUntil = now + this.GO_BANNER_TIME;
+
+      enemyTypeEl.textContent = `${this.enemySkin.label} • ${this.currentPersonality.name}`;
+      enemyTypeEl.classList.add('visible');
+
+      tensionBar.classList.remove('visible');
+
+      if (Flags.enemyAI) this.scheduleEnemyFromGo(now);
+    }
+
+    endRound(result, reason) {
+      if (Flags.practice) return;
+      if (this.round.state === 'over') return;
+
+      this.round.state = 'over';
+      this.round.result = result;
+      this.round.reason = reason;
+
+      if (result === 'won') this.playerScore++;
+      else if (result === 'lost') this.enemyScore++;
+
+      this.updateScoreUI();
+
+      const matchEnded = this.isMatchOver();
+
+      const goAt = this.round.goAt;
+
+      const pReact = (this.player.metrics.drewAt != null && goAt != null) ? (this.player.metrics.drewAt - goAt) : null;
+      const eReact = (this.enemy.metrics.drewAt != null && goAt != null) ? (this.enemy.metrics.drewAt - goAt) : null;
+
+      const pDraw = (this.player.metrics.drawnAt != null && this.player.metrics.drewAt != null) ? (this.player.metrics.drawnAt - this.player.metrics.drewAt) : null;
+      const eDraw = (this.enemy.metrics.drawnAt != null && this.enemy.metrics.drewAt != null) ? (this.enemy.metrics.drawnAt - this.enemy.metrics.drewAt) : null;
+
+      const pAim  = (this.player.metrics.shotAt != null && this.player.metrics.drawnAt != null) ? (this.player.metrics.shotAt - this.player.metrics.drawnAt) : null;
+      const eAim  = (this.enemy.metrics.shotAt != null && this.enemy.metrics.drawnAt != null) ? (this.enemy.metrics.shotAt - this.enemy.metrics.drawnAt) : null;
+
+      const pShot = (this.player.metrics.shotAt != null && goAt != null) ? (this.player.metrics.shotAt - goAt) : null;
+      const eShot = (this.enemy.metrics.shotAt != null && goAt != null) ? (this.enemy.metrics.shotAt - goAt) : null;
+
+      let headline = '';
+      if (matchEnded) headline = (this.playerScore >= this.matchTarget()) ? '🏆 MATCH WON 🏆' : 'MATCH LOST';
+      else headline = (result === 'won') ? 'ENEMY DOWN' : (result === 'lost') ? 'YOU DIED' : 'DRAW';
+
+      const reasonLine = reason ? `<small style="color:#c9b08e">${reason}</small><br>` : '';
+      const statsBlock = `
+        <div style="margin-top:10px; font-size:12px; color:#bfa37a; line-height:1.35">
+          <div style="opacity:0.9"><b>You</b> — react ${ms(pReact)} • draw ${ms(pDraw)} • aim ${ms(pAim)} • shot ${ms(pShot)}</div>
+          <div style="opacity:0.9"><b>Them</b> — react ${ms(eReact)} • draw ${ms(eDraw)} • aim ${ms(eAim)} • shot ${ms(eShot)}</div>
+        </div>
+      `;
+      const prompt = matchEnded
+        ? `<br><small>Press N for new match</small>`
+        : `<br><small>Press R to continue • N for new match</small>`;
+
+      showMessage(`${headline}<br>${reasonLine}${statsBlock}${prompt}`);
+    }
+
+    updateScoreUI() {
+      scoreEl.textContent = `YOU ${this.playerScore} - ${this.enemyScore} THEM`;
+      const t = this.matchTarget();
+      firstToEl.textContent = (t === Infinity) ? 'Endless' : `First to ${t}`;
+      btnMatch.textContent = `Match: ${matchLabel()}`;
+    }
+
+    // --------------------
+    // Combat
+    // --------------------
+    startPlayerDraw(now) {
+      this.player.state = 'drawing';
+      this.player.frame = 0;
+      this.player.frameTime = 0;
+      this.player.hasShot = false;
+      this.player.releaseQueued = false;
+      this.player.aimStartAt = null;
+
+      this.player.metrics.drewAt = now;
+      this.player.metrics.drawnAt = null;
+      this.player.metrics.shotAt = null;
+    }
+
+    spawnBlood(x, y, direction) {
+      const count = 12 + Math.floor(Math.random() * 10);
+      for (let i = 0; i < count; i++) {
+        const angle = direction + (Math.random() - 0.5) * 1.5;
+        const speed = 50 + Math.random() * 150;
+        this.blood.push({
+          x, y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 50,
+          size: 2 + Math.random() * 4,
+          life: 1,
+          decay: 0.6 + Math.random() * 0.6
+        });
+      }
+    }
+
+    hitTarget(target, bulletVx, now) {
+      target.hitFlash = 0.22;
+
+      const bloodDir = bulletVx > 0 ? 0 : Math.PI;
+      this.spawnBlood(target.x, target.y - 10, bloodDir);
+
+      this.shakeAmount = 10;
+      this.shakeDuration = 0.4;
+
+      if (Flags.practice) return;
+
+      target.health = 0;
+      target.state = 'dead';
+      target.frame = 0;
+      target.frameTime = 0;
+      target.deadAt = now;
+    }
+
+    addBullet(shooter, target, aimX, aimY) {
+      const face = this.desiredFacingToward(shooter, target);
+      const muzzleX = shooter.x + this.muzzleOffsetX(face);
+      const muzzleY = shooter.y - 10;
+
+      const dx = aimX - muzzleX;
+      const dy = aimY - muzzleY;
+      const dist = Math.hypot(dx, dy) || 1;
+
+      this.bullets.push({
+        x: muzzleX, y: muzzleY,
+        prevX: muzzleX, prevY: muzzleY,
+        vx: (dx / dist) * this.BULLET_SPEED,
+        vy: (dy / dist) * this.BULLET_SPEED,
+        shooter, target
+      });
+    }
+
+    getPlayerAim(now) {
+      const baseX = this.enemy.x;
+      const baseY = this.enemy.y - 10;
+
+      const spread = AimModel.spread(now, this.player.aimStartAt);
+      const c = AimModel.crosshairCenter(now, baseX, baseY, spread, this.player.aimSeed1, this.player.aimSeed2);
+      return { x: c.x, y: c.y, spread };
+    }
+
+    firePlayerShot(now) {
+      if (this.player.hasShot) return;
+
+      this.player.hasShot = true;
+      this.player.releaseQueued = false;
+      this.player.metrics.shotAt = now;
+
+      this.player.state = 'shooting';
+      this.player.frame = 0;
+      this.player.frameTime = 0;
+      this.flashAlpha = 0.30;
+
+      const aim = this.getPlayerAim(now);
+      const off = randomInDisc(aim.spread);
+      const aimX = aim.x + off.x;
+      const aimY = aim.y + off.y * 0.7;
+
+      this.addBullet(this.player, this.enemy, aimX, aimY);
+    }
+
+    fireEnemyShot(now) {
+      if (this.enemy.hasShot) return;
+      if (this.enemy.state !== 'aiming') return;
+
+      this.enemy.hasShot = true;
+      this.enemy.metrics.shotAt = now;
+
+      this.enemy.state = 'shooting';
+      this.enemy.frame = 0;
+      this.enemy.frameTime = 0;
+      this.flashAlpha = 0.25;
+
+      const p = this.currentPersonality;
+
+      const baseX = this.player.x;
+      const baseY = this.player.y - 10;
+
+      const aimDelay = this.enemy.ai.plannedAimDelay || rand(p.aimMin, p.aimMax);
+      const aimSpan = Math.max(0.001, p.aimMax - p.aimMin);
+      const aimFactor = clamp((aimDelay - p.aimMin) / aimSpan, 0, 1);
+
+      let acc = clamp(p.accuracy + 0.10 * aimFactor, 0.10, 0.92);
+      if (this.enemy.ai.flinched) acc = clamp(acc - 0.12, 0.10, 0.92);
+
+      const willHit = Math.random() < acc;
+
+      let aimX, aimY;
+      if (willHit) {
+        const r = lerp(this.HIT_RADIUS * 1.10, this.HIT_RADIUS * 0.45, acc);
+        const o = randomInDisc(r);
+        aimX = baseX + o.x;
+        aimY = baseY + o.y * 0.75;
+      } else {
+        const minR = this.HIT_RADIUS + 12;
+        const maxR = this.HIT_RADIUS + 70;
+        const a = Math.random() * Math.PI * 2;
+        const rr = minR + Math.random() * (maxR - minR);
+        aimX = baseX + Math.cos(a) * rr;
+        aimY = baseY + Math.sin(a) * rr * 0.75;
+      }
+
+      this.addBullet(this.enemy, this.player, aimX, aimY);
+    }
+
+    // --------------------
+    // Update
+    // --------------------
+    update(dt) {
+      const now = this.roundNowSeconds();
+      this.round.time = now;
+
+      if (!Flags.practice && this.round.state === 'standoff') {
+        this.updateStandoff(dt, now);
+      }
+
+      this.updatePlayer(dt, now);
+      this.updateEnemy(dt, now);
+      this.updateBullets(dt, now);
+
+      this.updateBlood(dt);
+      this.updateDust(dt);
+      this.updateTumbleweeds(dt);
+      this.updateShake(dt);
+
+      if (!Flags.practice) this.evaluateRoundEnd(now);
+
+      this.updateUI(now);
+    }
+
+    updateStandoff(dt, now) {
+      if (now > 0.6) tensionBar.classList.add('visible');
+
+      const t = clamp(now / this.round.goTime, 0, 1);
+      tensionFill.style.width = `${(t * 100).toFixed(1)}%`;
+
+      if (now > 1.2) {
+        enemyTypeEl.textContent = `${this.enemySkin.label} • ${this.currentPersonality.name}`;
+        enemyTypeEl.classList.add('visible');
+      }
+
+      const p = this.currentPersonality;
+      if (p.falseStartChance > 0 && Math.random() < p.falseStartChance * dt) {
+        this.endRound('won', 'ENEMY FALSE START');
+        return;
+      }
+
+      if (!this.round.goFired && now >= this.round.goTime) {
+        this.triggerGo(now);
+      }
+    }
+
+    updatePlayer(dt, now) {
+      this.player.hitFlash = Math.max(0, this.player.hitFlash - dt);
+
+      if (this.player.state === 'dead') {
+        const cfg = getCfg('cowboy1_die.png');
+        this.player.frameTime += dt;
+        if (this.player.frameTime > 0.1) {
+          this.player.frameTime = 0;
+          if (this.player.frame < cfg.frames - 1) this.player.frame++;
+        }
+        return;
+      }
+
+      if (this.player.state === 'holstering') {
+        const cfg = getCfg('cowboy1_draw-Sheet.png');
+        this.player.frameTime += dt;
+        if (this.player.frameTime > this.player.drawSpeed) {
+          this.player.frameTime = 0;
+          this.player.frame--;
+          if (this.player.frame <= 0) {
+            this.player.state = 'idle';
+            this.player.frame = 0;
+            this.player.aimStartAt = null;
+            this.player.releaseQueued = false;
+          }
+        }
+        return;
+      }
+
+      if (this.player.state === 'shooting') {
+        const cfg = getCfg('cowboy1_ONLYshooting(nodraw)-Sheet.png');
+        this.player.frameTime += dt;
+        if (this.player.frameTime > 0.05) {
+          this.player.frameTime = 0;
+          this.player.frame++;
+          if (this.player.frame >= cfg.frames) {
+            this.player.state = 'aiming';
+            this.player.frame = getCfg('cowboy1_draw-Sheet.png').frames - 1;
+
+            if (Flags.practice) {
+              this.player.hasShot = false;
+              this.player.aimStartAt = null;
+            }
+          }
+        }
+        return;
+      }
+
+      if (this.player.state === 'drawing') {
+        if (!Input.drawHeld && !this.player.releaseQueued) return;
+
+        const cfg = getCfg('cowboy1_draw-Sheet.png');
+        this.player.frameTime += dt;
+        if (this.player.frameTime > this.player.drawSpeed) {
+          this.player.frameTime = 0;
+          this.player.frame++;
+          if (this.player.frame >= cfg.frames) {
+            this.player.state = 'aiming';
+            this.player.frame = cfg.frames - 1;
+
+            this.player.metrics.drawnAt = now;
+            this.player.aimSeed1 = Math.random() * 10;
+            this.player.aimSeed2 = Math.random() * 10;
+            this.player.aimStartAt = now;
+
+            if (this.player.releaseQueued && !this.player.hasShot && this.enemy.health > 0) {
+              this.firePlayerShot(now);
+            }
+          }
+        }
+        return;
+      }
+
+      if (this.player.state === 'aiming') {
+        this.player.frame = getCfg('cowboy1_draw-Sheet.png').frames - 1;
+        if (Input.drawHeld && !this.player.hasShot) {
+          if (this.player.aimStartAt == null) this.player.aimStartAt = now;
+        }
+      }
+    }
+
+    updateEnemy(dt, now) {
+      this.enemy.hitFlash = Math.max(0, this.enemy.hitFlash - dt);
+
+      const drawSprite = this.enemySkin.draw;
+      const shootSprite = this.enemySkin.shoot;
+      const deathSprite = this.enemySkin.death;
+
+      if (this.enemy.state === 'dead') {
+        const cfg = getCfg(deathSprite);
+        this.enemy.frameTime += dt;
+        if (this.enemy.frameTime > 0.1) {
+          this.enemy.frameTime = 0;
+          if (this.enemy.frame < cfg.frames - 1) this.enemy.frame++;
+        }
+        return;
+      }
+
+      if (this.enemy.state === 'shooting') {
+        const cfg = getCfg(shootSprite);
+        this.enemy.frameTime += dt;
+        if (this.enemy.frameTime > 0.05) {
+          this.enemy.frameTime = 0;
+          this.enemy.frame++;
+          if (this.enemy.frame >= Math.min(5, cfg.frames)) {
+            this.enemy.state = 'aiming';
+            this.enemy.frame = getCfg(drawSprite).frames - 1;
+
+            if (Flags.practice) {
+              this.enemy.hasShot = false;
+              this.enemy.ai.fireAt = now + rand(0.45, 1.10);
+            }
+          }
+        }
+        return;
+      }
+
+      if (this.enemy.state === 'drawing') {
+        const cfg = getCfg(drawSprite);
+        this.enemy.frameTime += dt;
+        if (this.enemy.frameTime > this.enemy.drawSpeed) {
+          this.enemy.frameTime = 0;
+          this.enemy.frame++;
+          if (this.enemy.frame >= cfg.frames) {
+            this.enemy.state = 'aiming';
+            this.enemy.frame = cfg.frames - 1;
+            this.enemy.metrics.drawnAt = now;
+            this.enemy.aimStartAt = now;
+
+            const p = this.currentPersonality;
+            this.enemy.ai.plannedAimDelay = rand(p.aimMin, p.aimMax);
+            this.enemy.ai.fireAt = now + this.enemy.ai.plannedAimDelay;
+          }
+        }
+        return;
+      }
+
+      if (this.enemy.state === 'aiming') {
+        this.enemy.frame = getCfg(drawSprite).frames - 1;
+        if (Flags.enemyAI && !this.enemy.hasShot && this.enemy.ai.fireAt != null && now >= this.enemy.ai.fireAt && this.player.health > 0) {
+          this.fireEnemyShot(now);
+        }
+        return;
+      }
+
+      if (!Flags.enemyAI) return;
+
+      if (this.round.state === 'duel' && this.enemy.ai.drawAt != null && now >= this.enemy.ai.drawAt) {
+        this.enemy.state = 'drawing';
+        this.enemy.frame = 0;
+        this.enemy.frameTime = 0;
+        this.enemy.metrics.drewAt = now;
+        this.enemy.metrics.drawnAt = null;
+        this.enemy.ai.drawAt = null;
+      }
+    }
+
+    updateBullets(dt, now) {
+      for (let i = this.bullets.length - 1; i >= 0; i--) {
+        const b = this.bullets[i];
+        b.prevX = b.x;
+        b.prevY = b.y;
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+
+        if (b.target.health > 0 || Flags.practice) {
+          const tx = b.target.x;
+          const ty = b.target.y - 10;
+          const d = distPointToSegment(tx, ty, b.prevX, b.prevY, b.x, b.y);
+          if (d <= this.HIT_RADIUS) {
+            this.hitTarget(b.target, b.vx, now);
+            this.bullets.splice(i, 1);
+            continue;
+          }
+        }
+
+        if (b.x < -60 || b.x > canvas.width + 60 || b.y < -60 || b.y > canvas.height + 60) {
+          this.bullets.splice(i, 1);
+        }
+      }
+    }
+
+    updateBlood(dt) {
+      for (let i = this.blood.length - 1; i >= 0; i--) {
+        const p = this.blood[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vy += 200 * dt;
+        p.life -= p.decay * dt;
+
+        if (p.y > 360) {
+          p.y = 360;
+          p.vx *= 0.5;
+          p.vy = 0;
+          p.decay *= 0.3;
+        }
+        if (p.life <= 0) this.blood.splice(i, 1);
+      }
+    }
+
+    initDust() {
+      this.dust.length = 0;
+      for (let i = 0; i < 30; i++) {
+        this.dust.push({
+          x: Math.random() * canvas.width,
+          y: 200 + Math.random() * 250,
+          size: 1 + Math.random() * 2,
+          speed: 5 + Math.random() * 15,
+          alpha: 0.1 + Math.random() * 0.2
+        });
+      }
+    }
+
+    updateDust(dt) {
+      for (const p of this.dust) {
+        p.x += p.speed * dt;
+        if (p.x > canvas.width + 10) {
+          p.x = -10;
+          p.y = 200 + Math.random() * 250;
+        }
+      }
+    }
+
+    updateTumbleweeds(dt) {
+      if (this.tumbleweeds.length < 2 && Math.random() < 0.002) {
+        const fromLeft = Math.random() < 0.5;
+        this.tumbleweeds.push({
+          x: fromLeft ? -20 : canvas.width + 20,
+          y: 300 + Math.random() * 100,
+          vx: fromLeft ? 40 + Math.random() * 30 : -(40 + Math.random() * 30),
+          rotation: 0,
+          size: 8 + Math.random() * 8
+        });
+      }
+
+      for (let i = this.tumbleweeds.length - 1; i >= 0; i--) {
+        const t = this.tumbleweeds[i];
+        t.x += t.vx * dt;
+        t.rotation += t.vx * 0.05 * dt;
+        if (t.x < -30 || t.x > canvas.width + 30) this.tumbleweeds.splice(i, 1);
+      }
+    }
+
+    updateShake(dt) {
+      if (this.shakeDuration > 0) {
+        this.shakeDuration -= dt;
+        this.shakeAmount *= 0.9;
+        if (this.shakeDuration <= 0) this.shakeAmount = 0;
+      }
+      if (this.flashAlpha > 0) this.flashAlpha -= dt * 2;
+    }
+
+    evaluateRoundEnd(now) {
+      if (this.round.state !== 'duel') return;
+
+      const pDead = this.player.health <= 0;
+      const eDead = this.enemy.health <= 0;
+
+      if (pDead || eDead) {
+        if (pDead && eDead) {
+          const dt = Math.abs((this.player.deadAt ?? now) - (this.enemy.deadAt ?? now));
+          if (dt <= this.TIE_EPS) this.endRound('draw', 'SIMULTANEOUS HIT');
+          else if ((this.player.deadAt ?? now) < (this.enemy.deadAt ?? now)) this.endRound('lost', 'YOU WENT DOWN FIRST');
+          else this.endRound('won', 'THEM WENT DOWN FIRST');
+        } else if (pDead) this.endRound('lost', 'SHOT');
+        else this.endRound('won', 'SHOT');
+        return;
+      }
+
+      if (this.player.hasShot && this.enemy.hasShot && this.bullets.length === 0) {
+        this.endRound('draw', 'BOTH MISSED');
+      }
+    }
+
+    updateUI(now) {
+      const roundNum = this.playerScore + this.enemyScore + 1;
+      roundEl.textContent = `Round ${roundNum}${Flags.practice ? ' (Practice)' : ''}`;
+
+      if (Flags.practice) statusEl.textContent = 'Practice Range (DUEL)';
+      else if (this.round.state === 'standoff') statusEl.textContent = 'Wait for DRAW!';
+      else statusEl.textContent = 'Duel';
+
+      if (this.player.state === 'aiming' && !this.player.hasShot) {
+        const aim = this.getPlayerAim(now);
+        const chance = AimModel.approxHitChance(this.HIT_RADIUS, aim.spread);
+        subStatusEl.textContent = Flags.debug
+          ? `Spread ${aim.spread.toFixed(1)}px • ~Hit ${Math.round(chance*100)}% • Release to shoot • Q holster`
+          : `Release to shoot • Q holster`;
+      } else if (this.player.state === 'drawing') {
+        subStatusEl.textContent = this.player.releaseQueued ? 'Quick shot queued…' : 'Drawing…';
+      } else if (this.player.state === 'holstering') {
+        subStatusEl.textContent = 'Holstering…';
+      } else {
+        subStatusEl.textContent = Flags.practice ? 'Hold/release to test aim. Q holsters without firing.' : '';
+      }
+    }
+
+    // --------------------
+    // Draw
+    // --------------------
+    draw() {
+      ctx.save();
+      if (this.shakeAmount > 0) {
+        ctx.translate((Math.random()-0.5)*this.shakeAmount*2, (Math.random()-0.5)*this.shakeAmount*2);
+      }
+
+      // Sky + sun
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, 260);
+      skyGrad.addColorStop(0, '#5BA3C8');
+      skyGrad.addColorStop(0.5, '#87CEEB');
+      skyGrad.addColorStop(1, '#E8D4A8');
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, canvas.width, 260);
+
+      const sunGrad = ctx.createRadialGradient(320, 80, 0, 320, 80, 100);
+      sunGrad.addColorStop(0, 'rgba(255, 250, 200, 0.9)');
+      sunGrad.addColorStop(0.3, 'rgba(255, 240, 180, 0.4)');
+      sunGrad.addColorStop(1, 'rgba(255, 230, 150, 0)');
+      ctx.fillStyle = sunGrad;
+      ctx.fillRect(220, 0, 200, 180);
+
+      ctx.fillStyle = '#FFF8DC';
+      ctx.beginPath();
+      ctx.arc(320, 80, 25, 0, Math.PI*2);
+      ctx.fill();
+
+      // Mesas
+      for (const m of this.mesas) {
+        ctx.fillStyle = m.color;
+        ctx.beginPath();
+        ctx.moveTo(m.x, 260);
+        ctx.lineTo(m.x + 15, 260 - m.h);
+        ctx.lineTo(m.x + m.w - 15, 260 - m.h);
+        ctx.lineTo(m.x + m.w, 260);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = 'rgba(255,255,255,0.1)';
+        ctx.beginPath();
+        ctx.moveTo(m.x + 15, 260 - m.h);
+        ctx.lineTo(m.x + m.w/2, 260 - m.h);
+        ctx.lineTo(m.x + m.w/2 - 10, 260);
+        ctx.lineTo(m.x, 260);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // Ground
+      ctx.fillStyle = '#C9A86C';
+      ctx.fillRect(0, 260, canvas.width, 220);
+
+      // Ground patches
+      for (const p of this.groundPatches) {
+        ctx.fillStyle = `rgba(100, 80, 50, ${p.alpha})`;
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y, p.w/2, p.h/2, 0, 0, Math.PI*2);
+        ctx.fill();
+      }
+
+      // Sand speckles
+      ctx.fillStyle = '#b89a5a';
+      for (let i = 0; i < 80; i++) ctx.fillRect((i*73+11)%canvas.width, 265+(i*47)%190, 2, 1);
+      ctx.fillStyle = '#d4b87a';
+      for (let i = 0; i < 50; i++) ctx.fillRect((i*97+33)%canvas.width, 270+(i*31)%180, 1, 1);
+
+      // Trees
+      for (const t of this.trees) {
+        const sprite = 'trees1-Sheet.png';
+        if (!spriteOk(sprite)) continue;
+
+        const cfg = getCfg(sprite, 64, 80);
+        const s = t.scale;
+
+        ctx.save();
+        ctx.globalAlpha = t.y < 260 ? 0.6 : 1;
+        ctx.drawImage(
+          sprites[sprite],
+          (t.type % cfg.frames) * cfg.fw, 0,
+          cfg.fw, cfg.fh,
+          t.x - (cfg.fw * s) / 2,
+          t.y - (cfg.fh * s) + 20,
+          cfg.fw * s, cfg.fh * s
+        );
+        ctx.restore();
+      }
+
+      // Dust
+      for (const p of this.dust) {
+        ctx.fillStyle = `rgba(210, 190, 150, ${p.alpha})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+        ctx.fill();
+      }
+
+      // Shadows
+      ctx.fillStyle = 'rgba(0,0,0,0.15)';
+      ctx.beginPath(); ctx.ellipse(this.player.x, this.player.y + 30, 18, 5, 0, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(this.enemy.x, this.enemy.y + 30, 18, 5, 0, 0, Math.PI*2); ctx.fill();
+
+      // Blood ground
+      for (const p of this.blood) {
+        if (p.y >= 355) {
+          ctx.fillStyle = `rgba(100, 20, 20, ${p.life * 0.8})`;
+          ctx.fillRect(p.x - p.size/2, p.y, p.size, p.size * 0.3);
+        }
+      }
+
+      // Cowboys
+      this.drawPlayer();
+      this.drawEnemy();
+
+      // Hit flashes
+      this.drawHitFlash(this.player);
+      this.drawHitFlash(this.enemy);
+
+      // Blood air
+      for (const p of this.blood) {
+        if (p.y < 355) {
+          ctx.fillStyle = `rgba(140, 30, 30, ${p.life})`;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size/2, 0, Math.PI*2);
+          ctx.fill();
+        }
+      }
+
+      // Tumbleweeds
+      for (const t of this.tumbleweeds) {
+        ctx.save();
+        ctx.translate(t.x, t.y);
+        ctx.rotate(t.rotation);
+        ctx.fillStyle = '#8B7355';
+        ctx.beginPath();
+        ctx.arc(0, 0, t.size, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Bullets
+      for (const b of this.bullets) {
+        ctx.fillStyle = 'rgba(255,200,50,0.35)';
+        ctx.beginPath();
+        ctx.arc(b.x - b.vx * this.BULLET_TRAIL, b.y - b.vy * this.BULLET_TRAIL, 2, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = '#ffdd44';
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, 3, 0, Math.PI*2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+
+      // Vignette
+      const vignetteGrad = ctx.createRadialGradient(320, 240, 150, 320, 240, 400);
+      vignetteGrad.addColorStop(0, 'rgba(0,0,0,0)');
+      vignetteGrad.addColorStop(1, 'rgba(0,0,0,0.4)');
+      ctx.fillStyle = vignetteGrad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Flash
+      if (this.flashAlpha > 0) {
+        ctx.fillStyle = `rgba(255, 240, 200, ${this.flashAlpha})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+
+      // Aim visuals
+      if (this.round.state === 'duel' && this.player.state === 'aiming' && !this.player.hasShot) {
+        const aim = this.getPlayerAim(this.round.time);
+        const chance = AimModel.approxHitChance(this.HIT_RADIUS, aim.spread);
+
+        // enemy hit ring
+        ctx.save();
+        ctx.globalAlpha = 0.30;
+        ctx.strokeStyle = 'rgba(255, 120, 120, 0.55)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(this.enemy.x, this.enemy.y - 10, this.HIT_RADIUS, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.restore();
+
+        // spread ring & crosshair
+        const g = Math.round(lerp(80, 220, chance));
+        const r = Math.round(lerp(220, 120, chance));
+
+        ctx.save();
+        ctx.strokeStyle = `rgba(${r}, ${g}, 120, 0.40)`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(aim.x, aim.y, aim.spread, 0, Math.PI*2);
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(255, 245, 220, 0.95)';
+        ctx.lineWidth = 1;
+        const size = 10;
+        ctx.beginPath();
+        ctx.moveTo(aim.x - size, aim.y); ctx.lineTo(aim.x - 2, aim.y);
+        ctx.moveTo(aim.x + 2, aim.y);   ctx.lineTo(aim.x + size, aim.y);
+        ctx.moveTo(aim.x, aim.y - size);ctx.lineTo(aim.x, aim.y - 2);
+        ctx.moveTo(aim.x, aim.y + 2);   ctx.lineTo(aim.x, aim.y + size);
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(255, 220, 140, 0.85)';
+        ctx.fillRect(aim.x - 1, aim.y - 1, 2, 2);
+        ctx.restore();
+      }
+
+      // Enemy flinch indicator
+      if (this.enemy.ai.flinchUntil > this.round.time) {
+        ctx.save();
+        ctx.globalAlpha = 0.9;
+        ctx.font = 'bold 20px Georgia';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#fff1c9';
+        ctx.fillText('!', this.enemy.x, this.enemy.y - 70);
+        ctx.restore();
+      }
+    }
+
+    drawHitFlash(ent) {
+      if (ent.hitFlash <= 0) return;
+      ctx.save();
+      ctx.globalAlpha = ent.hitFlash;
+      ctx.fillStyle = 'rgba(220, 60, 60, 0.35)';
+      ctx.beginPath();
+      ctx.arc(ent.x, ent.y - 10, 22, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    drawPlayer() {
+      const scale = 3;
+
+      let name = 'cowboy1_draw-Sheet.png';
+      if (this.player.state === 'dead') name = 'cowboy1_die.png';
+      else if (this.player.state === 'shooting') name = 'cowboy1_ONLYshooting(nodraw)-Sheet.png';
+      else name = 'cowboy1_draw-Sheet.png';
+
+      const cfg = getCfg(name);
+      let frame = 0;
+
+      if (this.player.state === 'aiming') frame = getCfg('cowboy1_draw-Sheet.png').frames - 1;
+      else if (this.player.state === 'holstering') frame = clamp(this.player.frame, 0, getCfg('cowboy1_draw-Sheet.png').frames - 1);
+      else frame = clamp(this.player.frame, 0, cfg.frames - 1);
+
+      const desiredFacing = this.desiredFacingToward(this.player, this.enemy); // should be +1
+      const sx = this.playerScaleX(desiredFacing);
+
+      drawSpriteFrame(name, frame, this.player.x, this.player.y, sx * scale, scale, 1);
+    }
+
+    drawEnemy() {
+      const scale = 3;
+
+      let name = this.enemySkin.draw;
+      if (this.enemy.state === 'dead') name = this.enemySkin.death;
+      else if (this.enemy.state === 'shooting') name = this.enemySkin.shoot;
+      else name = this.enemySkin.draw;
+
+      const cfg = getCfg(name);
+      let frame = 0;
+
+      if (this.enemy.state === 'aiming') frame = getCfg(this.enemySkin.draw).frames - 1;
+      else if (this.enemy.state === 'shooting') frame = clamp(this.enemy.frame, 0, Math.min(4, cfg.frames - 1));
+      else frame = clamp(this.enemy.frame, 0, cfg.frames - 1);
+
+      const desiredFacing = this.desiredFacingToward(this.enemy, this.player); // should be -1
+      const sx = this.enemyScaleX(desiredFacing);
+
+      drawSpriteFrame(name, frame, this.enemy.x, this.enemy.y, sx * scale, scale, 1);
+    }
+
+    generateEnvironment() {
+      this.trees.length = 0;
+      this.mesas.length = 0;
+      this.groundPatches.length = 0;
+
+      this.mesas.push({ x: 80,  w: 120, h: 60, color: '#a08870' });
+      this.mesas.push({ x: 250, w: 80,  h: 40, color: '#9a8268' });
+      this.mesas.push({ x: 450, w: 140, h: 70, color: '#a58a72' });
+      this.mesas.push({ x: 580, w: 90,  h: 45, color: '#9a8268' });
+
+      this.trees.push({ x: 30, y: 260, type: 3, scale: 0.9 });
+      this.trees.push({ x: 60, y: 280, type: 7, scale: 1.0 });
+      this.trees.push({ x: 15, y: 310, type: 2, scale: 0.8 });
+
+      this.trees.push({ x: 590, y: 255, type: 5, scale: 0.85 });
+      this.trees.push({ x: 620, y: 275, type: 1, scale: 0.95 });
+      this.trees.push({ x: 610, y: 305, type: 4, scale: 0.75 });
+
+      this.trees.push({ x: 200, y: 230, type: 8, scale: 0.5 });
+      this.trees.push({ x: 440, y: 225, type: 6, scale: 0.45 });
+
+      for (let i = 0; i < 12; i++) {
+        this.groundPatches.push({
+          x: Math.random() * canvas.width,
+          y: 260 + Math.random() * 200,
+          w: 30 + Math.random() * 60,
+          h: 10 + Math.random() * 20,
+          alpha: 0.1 + Math.random() * 0.15
+        });
+      }
+
+      this.trees.sort((a,b) => a.y - b.y);
+    }
+  }
+
+  // =========================================================
+  // Scene: OVERWORLD
+  // =========================================================
+  class OverworldScene {
+    constructor() {
+      this.worldW = 2200;
+      this.worldH = 2200;
+      this.camera = { x: 0, y: 0 };
+
+      this.BULLET_SPEED = 900;
+      this.BULLET_TRAIL = 0.016;
+
+      // auto-holster tuning (your request: “longer than you think”)
+      this.AUTO_HOLSTER_WHILE_MOVING_SEC = 3.8;
+
+      this.player = {
+        x: this.worldW/2 - 200,
+        y: this.worldH/2 + 120,
+        speed: 140,
+        radius: 12,
+        facingX: 1, // for walk sheet
+        dir: 0,
+        walkT: 0,
+
+        combat: {
+          state: 'holstered', // holstered | drawing | aiming | shooting | holstering
+          frame: 0,
+          frameTime: 0,
+          drawSpeed: 0.030,
+          hasShot: false,
+          releaseQueued: false,
+          aimStartAt: null,
+          aimSeed1: Math.random() * 10,
+          aimSeed2: Math.random() * 10,
+
+          // side-view gun facing (left/right)
+          facing: 1,
+
+          // auto-holster
+          lastActionAt: 0,
+        }
+      };
+
+      this.isMoving = false;
+      this.moveX = 0;
+      this.moveY = 0;
+
+      this.obstacles = [];
+      this.bullets = [];
+      this.dust = [];
+      this.tumbleweeds = [];
+      this.flashAlpha = 0;
+
+      this.duelSpot = { x: this.worldW / 2, y: this.worldH / 2, r: 40 };
+
+      this.groundTile = document.createElement('canvas');
+      this.groundTile.width = 256;
+      this.groundTile.height = 256;
+      this.makeGroundTile();
+
+      this.time = 0;
+    }
+
+    onEnter() { this.reset(); }
+    onExit() {}
+
+    newMatch() { this.reset(); }
+    reset() {
+      this.time = 0;
+      this.player.x = this.worldW/2 - 200;
+      this.player.y = this.worldH/2 + 120;
+      this.player.walkT = 0;
+      this.player.dir = 0;
+      this.player.facingX = 1;
+
+      const c = this.player.combat;
+      c.state = 'holstered';
+      c.frame = 0;
+      c.frameTime = 0;
+      c.hasShot = false;
+      c.releaseQueued = false;
+      c.aimStartAt = null;
+      c.facing = 1;
+      c.lastActionAt = 0;
+
+      this.isMoving = false;
+      this.moveX = 0;
+      this.moveY = 0;
+
+      this.flashAlpha = 0;
+      this.bullets.length = 0;
+      this.obstacles.length = 0;
+      this.dust.length = 0;
+      this.tumbleweeds.length = 0;
+
+      this.generateWorld();
+      this.initDust();
+      this.updateCamera();
+
+      hideMessage();
+    }
+
+    onHolsterToggle() {
+      const c = this.player.combat;
+      if (c.state === 'holstered' || c.state === 'shooting') return;
+
+      const drawCfg = getCfg('cowboy1_draw-Sheet.png');
+      c.state = 'holstering';
+      c.frameTime = 0;
+      c.releaseQueued = false;
+      c.aimStartAt = null;
+      c.lastActionAt = this.time;
+
+      if (c.state === 'aiming') c.frame = drawCfg.frames - 1;
+    }
+
+    onDrawPress() {
+      const now = this.time;
+      const c = this.player.combat;
+
+      // Decide facing from pointer immediately (feels good)
+      const aim = this.getAimBaseWorld();
+      c.facing = (aim.x < this.player.x) ? -1 : 1;
+
+      if (c.state === 'holstered') {
+        c.state = 'drawing';
+        c.frame = 0;
+        c.frameTime = 0;
+        c.hasShot = false;
+        c.releaseQueued = false;
+        c.aimStartAt = null;
+        c.lastActionAt = now;
+        return;
+      }
+
+      if (c.state === 'aiming' && !c.hasShot) {
+        c.aimStartAt = now;
+        c.lastActionAt = now;
+      }
+    }
+
+    onDrawRelease() {
+      if (Input.suppressNextRelease) {
+        Input.suppressNextRelease = false;
+        return;
+      }
+
+      const now = this.time;
+      const c = this.player.combat;
+
+      if (c.state === 'drawing' && !c.hasShot) {
+        c.releaseQueued = true;
+        return;
+      }
+
+      if (c.state === 'aiming' && !c.hasShot) {
+        this.firePlayerShot(now);
+      }
+    }
+
+    getAimBaseWorld() {
+      return { x: this.camera.x + Input.pointer.x, y: this.camera.y + Input.pointer.y };
+    }
+
+    getCrosshair(now) {
+      const base = this.getAimBaseWorld();
+      const spread = AimModel.spread(now, this.player.combat.aimStartAt);
+      const c = AimModel.crosshairCenter(now, base.x, base.y, spread, this.player.combat.aimSeed1, this.player.combat.aimSeed2);
+      return { x: c.x, y: c.y, spread };
+    }
+
+    firePlayerShot(now) {
+      const c = this.player.combat;
+      if (c.hasShot) return;
+
+      c.hasShot = true;
+      c.releaseQueued = false;
+
+      c.state = 'shooting';
+      c.frame = 0;
+      c.frameTime = 0;
+      this.flashAlpha = 0.22;
+
+      c.lastActionAt = now;
+
+      const aim = this.getCrosshair(now);
+      const off = randomInDisc(aim.spread);
+      const aimX = aim.x + off.x;
+      const aimY = aim.y + off.y * 0.7;
+
+      const muzzleX = this.player.x + (c.facing > 0 ? 18 : -18);
+      const muzzleY = this.player.y - 6;
+
+      const dx = aimX - muzzleX;
+      const dy = aimY - muzzleY;
+      const dist = Math.hypot(dx, dy) || 1;
+
+      this.bullets.push({
+        x: muzzleX, y: muzzleY,
+        prevX: muzzleX, prevY: muzzleY,
+        vx: (dx / dist) * this.BULLET_SPEED,
+        vy: (dy / dist) * this.BULLET_SPEED
+      });
+    }
+
+    update(dt) {
+      this.time += dt;
+
+      this.updateMovement(dt);
+      this.updateCombat(dt);
+      this.updateBullets(dt);
+      this.updateDust(dt);
+      this.updateTumbleweeds(dt);
+      this.updateCamera();
+
+      if (this.flashAlpha > 0) this.flashAlpha -= dt * 2;
+
+      this.updateUI();
+    }
+
+    updateMovement(dt) {
+      const up = Input.keys.has('w') || Input.keys.has('arrowup');
+      const down = Input.keys.has('s') || Input.keys.has('arrowdown');
+      const left = Input.keys.has('a') || Input.keys.has('arrowleft');
+      const right = Input.keys.has('d') || Input.keys.has('arrowright');
+
+      let mx = 0, my = 0;
+      if (up) my -= 1;
+      if (down) my += 1;
+      if (left) mx -= 1;
+      if (right) mx += 1;
+
+      this.isMoving = (mx !== 0 || my !== 0);
+      this.moveX = mx;
+      this.moveY = my;
+
+      const c = this.player.combat;
+      const combatSlow = (c.state !== 'holstered') ? 0.75 : 1.0;
+      const speed = this.player.speed * combatSlow;
+
+      if (this.isMoving) {
+        const len = Math.hypot(mx, my) || 1;
+        mx /= len; my /= len;
+
+        if (mx < -0.1) this.player.facingX = -1;
+        if (mx >  0.1) this.player.facingX =  1;
+
+        // OPTIONAL: keep the 4-way stand orientation when not using gun sprites
+        if (Math.abs(mx) > Math.abs(my)) this.player.dir = (mx < 0) ? 1 : 2;
+        else this.player.dir = (my < 0) ? 3 : 0;
+
+        const nx = this.player.x + mx * speed * dt;
+        const ny = this.player.y + my * speed * dt;
+
+        this.tryMove(nx, ny);
+        this.player.walkT += dt;
+      }
+    }
+
+    tryMove(nx, ny) {
+      nx = clamp(nx, this.player.radius, this.worldW - this.player.radius);
+      ny = clamp(ny, this.player.radius, this.worldH - this.player.radius);
+
+      let x = nx, y = ny;
+
+      for (const o of this.obstacles) {
+        const dx = x - o.x;
+        const dy = y - o.y;
+        const d = Math.hypot(dx, dy) || 0.0001;
+        const minD = this.player.radius + o.r;
+        if (d < minD) {
+          const push = (minD - d);
+          x += (dx / d) * push;
+          y += (dy / d) * push;
+        }
+      }
+
+      this.player.x = clamp(x, this.player.radius, this.worldW - this.player.radius);
+      this.player.y = clamp(y, this.player.radius, this.worldH - this.player.radius);
+    }
+
+    updateCombat(dt) {
+      const c = this.player.combat;
+      const now = this.time;
+
+      // While gun is out, allow flipping while moving (your request)
+      if (c.state !== 'holstered') {
+        // if moving left/right, face that way
+        if (Math.abs(this.moveX) > 0.1) c.facing = (this.moveX < 0) ? -1 : 1;
+        else {
+          // otherwise face pointer (feels good with mouse/touch)
+          const base = this.getAimBaseWorld();
+          c.facing = (base.x < this.player.x) ? -1 : 1;
+        }
+      }
+
+      // Auto-holster while moving with gun out (long delay, not annoying)
+      if (
+        c.state === 'aiming' &&
+        this.isMoving &&
+        !Input.drawHeld &&
+        (now - c.lastActionAt) > this.AUTO_HOLSTER_WHILE_MOVING_SEC
+      ) {
+        // start holster
+        c.state = 'holstering';
+        c.frameTime = 0;
+        c.releaseQueued = false;
+        c.aimStartAt = null;
+        // start from last draw frame
+        c.frame = getCfg('cowboy1_draw-Sheet.png').frames - 1;
+        c.lastActionAt = now;
+        return;
+      }
+
+      if (c.state === 'holstering') {
+        const cfg = getCfg('cowboy1_draw-Sheet.png');
+        c.frameTime += dt;
+        if (c.frameTime > c.drawSpeed) {
+          c.frameTime = 0;
+          c.frame--;
+          if (c.frame <= 0) {
+            c.state = 'holstered';
+            c.frame = 0;
+            c.aimStartAt = null;
+            c.releaseQueued = false;
+          }
+        }
+        return;
+      }
+
+      if (c.state === 'drawing') {
+        if (!Input.drawHeld && !c.releaseQueued) return;
+
+        const cfg = getCfg('cowboy1_draw-Sheet.png');
+        c.frameTime += dt;
+        if (c.frameTime > c.drawSpeed) {
+          c.frameTime = 0;
+          c.frame++;
+          if (c.frame >= cfg.frames) {
+            c.state = 'aiming';
+            c.frame = cfg.frames - 1;
+
+            c.aimSeed1 = Math.random() * 10;
+            c.aimSeed2 = Math.random() * 10;
+            c.aimStartAt = now;
+            c.lastActionAt = now;
+
+            if (c.releaseQueued && !c.hasShot) {
+              this.firePlayerShot(now);
+            }
+          }
+        }
+        return;
+      }
+
+      if (c.state === 'aiming') {
+        if (Input.drawHeld && !c.hasShot) {
+          if (c.aimStartAt == null) c.aimStartAt = now;
+          c.lastActionAt = now;
+        }
+      }
+
+      if (c.state === 'shooting') {
+        const cfg = getCfg('cowboy1_ONLYshooting(nodraw)-Sheet.png');
+        c.frameTime += dt;
+        if (c.frameTime > 0.05) {
+          c.frameTime = 0;
+          c.frame++;
+          if (c.frame >= cfg.frames) {
+            c.state = 'aiming';
+            c.frame = getCfg('cowboy1_draw-Sheet.png').frames - 1;
+            c.hasShot = false;
+            c.aimStartAt = null;
+            // lastActionAt already set on shot
+          }
+        }
+      }
+    }
+
+    updateBullets(dt) {
+      for (let i = this.bullets.length - 1; i >= 0; i--) {
+        const b = this.bullets[i];
+        b.prevX = b.x; b.prevY = b.y;
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+
+        let hit = false;
+        for (const o of this.obstacles) {
+          const d = distPointToSegment(o.x, o.y, b.prevX, b.prevY, b.x, b.y);
+          if (d <= o.r) { hit = true; break; }
+        }
+        if (hit) {
+          this.bullets.splice(i, 1);
+          continue;
+        }
+
+        if (b.x < 0 || b.x > this.worldW || b.y < 0 || b.y > this.worldH) {
+          this.bullets.splice(i, 1);
+        }
+      }
+    }
+
+    initDust() {
+      this.dust.length = 0;
+      for (let i = 0; i < 40; i++) {
+        this.dust.push({
+          x: rand(0, canvas.width),
+          y: rand(0, canvas.height),
+          size: 1 + Math.random() * 2,
+          speed: 8 + Math.random() * 18,
+          alpha: 0.08 + Math.random() * 0.18
+        });
+      }
+    }
+
+    updateDust(dt) {
+      for (const p of this.dust) {
+        p.x += p.speed * dt;
+        if (p.x > canvas.width + 10) {
+          p.x = -10;
+          p.y = rand(0, canvas.height);
+        }
+      }
+    }
+
+    updateTumbleweeds(dt) {
+      if (this.tumbleweeds.length < 1 && Math.random() < 0.0015) {
+        const fromLeft = Math.random() < 0.5;
+        this.tumbleweeds.push({
+          x: fromLeft ? -20 : canvas.width + 20,
+          y: 200 + Math.random() * 220,
+          vx: fromLeft ? 30 + Math.random() * 30 : -(30 + Math.random() * 30),
+          rotation: 0,
+          size: 7 + Math.random() * 6
+        });
+      }
+
+      for (let i = this.tumbleweeds.length - 1; i >= 0; i--) {
+        const t = this.tumbleweeds[i];
+        t.x += t.vx * dt;
+        t.rotation += t.vx * 0.04 * dt;
+        if (t.x < -30 || t.x > canvas.width + 30) this.tumbleweeds.splice(i, 1);
+      }
+    }
+
+    updateCamera() {
+      this.camera.x = clamp(this.player.x - canvas.width / 2, 0, this.worldW - canvas.width);
+      this.camera.y = clamp(this.player.y - canvas.height / 2, 0, this.worldH - canvas.height);
+    }
+
+    updateUI() {
+      statusEl.textContent = `Overworld`;
+      roundEl.textContent = `Explore • TAB scene`;
+
+      const c = this.player.combat;
+
+      if (c.state === 'aiming' && !c.hasShot) {
+        const spread = AimModel.spread(this.time, c.aimStartAt);
+        const steadiness = 1 - clamp((spread - AimModel.spreadMin) / (AimModel.spreadStart - AimModel.spreadMin), 0, 1);
+        const pct = Math.round(steadiness * 100);
+
+        subStatusEl.textContent = Flags.debug
+          ? `Spread ${spread.toFixed(1)}px • Steady ${pct}% • Facing ${c.facing > 0 ? '→' : '←'} • Q holster`
+          : `Steadiness ${pct}% • Release to shoot • Q holster`;
+      } else if (c.state === 'drawing') {
+        subStatusEl.textContent = c.releaseQueued ? 'Quick shot queued…' : 'Drawing…';
+      } else if (c.state === 'holstering') {
+        subStatusEl.textContent = 'Holstering…';
+      } else {
+        subStatusEl.textContent = 'WASD move • Hold/release to shoot';
+      }
+    }
+
+    makeGroundTile() {
+      const c = this.groundTile.getContext('2d');
+      c.fillStyle = '#C9A86C';
+      c.fillRect(0, 0, 256, 256);
+
+      for (let i = 0; i < 12; i++) {
+        c.fillStyle = `rgba(100, 80, 50, ${0.08 + Math.random() * 0.10})`;
+        c.beginPath();
+        c.ellipse(rand(0,256), rand(0,256), rand(15, 40), rand(6, 18), rand(0, Math.PI), 0, Math.PI*2);
+        c.fill();
+      }
+
+      c.fillStyle = '#b89a5a';
+      for (let i = 0; i < 220; i++) c.fillRect(randInt(0,255), randInt(0,255), 2, 1);
+      c.fillStyle = '#d4b87a';
+      for (let i = 0; i < 140; i++) c.fillRect(randInt(0,255), randInt(0,255), 1, 1);
+    }
+
+    generateWorld() {
+      const addTree = (x, y) => {
+        this.obstacles.push({
+          x, y,
+          r: 18 + Math.random() * 6,
+          kind: 'tree',
+          type: randInt(0, 14),
+          scale: 0.8 + Math.random() * 0.35
+        });
+      };
+      const addCactus = (x, y) => {
+        this.obstacles.push({
+          x, y,
+          r: 12 + Math.random() * 4,
+          kind: 'cactus',
+          scale: 0.8 + Math.random() * 0.6
+        });
+      };
+
+      const clearR = 120;
+
+      for (let i = 0; i < 70; i++) {
+        const x = rand(80, this.worldW - 80);
+        const y = rand(80, this.worldH - 80);
+        const d = Math.hypot(x - this.duelSpot.x, y - this.duelSpot.y);
+        if (d < clearR) continue;
+
+        if (Math.random() < 0.55) addCactus(x, y);
+        else addTree(x, y);
+      }
+
+      for (let i = 0; i < 12; i++) addTree(240 + rand(-120,120), 240 + rand(-120,120));
+    }
+
+    draw() {
+      ctx.save();
+
+      // tile sand
+      ctx.fillStyle = '#C9A86C';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const ox = -(this.camera.x % 256);
+      const oy = -(this.camera.y % 256);
+      for (let y = oy - 256; y < canvas.height + 256; y += 256) {
+        for (let x = ox - 256; x < canvas.width + 256; x += 256) {
+          ctx.drawImage(this.groundTile, x, y);
+        }
+      }
+
+      // duel spot ring
+      const dsx = this.duelSpot.x - this.camera.x;
+      const dsy = this.duelSpot.y - this.camera.y;
+      ctx.save();
+      ctx.globalAlpha = 0.35;
+      ctx.strokeStyle = 'rgba(255, 230, 180, 0.9)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(dsx, dsy, this.duelSpot.r, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.restore();
+
+      // obstacles sorted by y
+      const obs = [...this.obstacles].sort((a,b) => a.y - b.y);
+      for (const o of obs) this.drawObstacle(o);
+
+      // bullets
+      for (const b of this.bullets) {
+        const sx = b.x - this.camera.x;
+        const sy = b.y - this.camera.y;
+
+        ctx.fillStyle = 'rgba(255,200,50,0.35)';
+        ctx.beginPath();
+        ctx.arc(sx - b.vx * this.BULLET_TRAIL, sy - b.vy * this.BULLET_TRAIL, 2, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = '#ffdd44';
+        ctx.beginPath();
+        ctx.arc(sx, sy, 3, 0, Math.PI*2);
+        ctx.fill();
+      }
+
+      // dust (screen)
+      for (const p of this.dust) {
+        ctx.fillStyle = `rgba(210, 190, 150, ${p.alpha})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+        ctx.fill();
+      }
+
+      // player
+      this.drawPlayer();
+
+      // tumbleweed
+      for (const t of this.tumbleweeds) {
+        ctx.save();
+        ctx.translate(t.x, t.y);
+        ctx.rotate(t.rotation);
+        ctx.fillStyle = '#8B7355';
+        ctx.beginPath();
+        ctx.arc(0, 0, t.size, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // flash
+      if (this.flashAlpha > 0) {
+        ctx.fillStyle = `rgba(255, 240, 200, ${this.flashAlpha})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+
+      // crosshair while aiming
+      const c = this.player.combat;
+      if (c.state === 'aiming' && !c.hasShot) {
+        const aim = this.getCrosshair(this.time);
+        const sx = aim.x - this.camera.x;
+        const sy = aim.y - this.camera.y;
+        this.drawCrosshair(sx, sy, aim.spread);
+      }
+
+      ctx.restore();
+
+      // vignette
+      const vignetteGrad = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 150, canvas.width/2, canvas.height/2, 420);
+      vignetteGrad.addColorStop(0, 'rgba(0,0,0,0)');
+      vignetteGrad.addColorStop(1, 'rgba(0,0,0,0.35)');
+      ctx.fillStyle = vignetteGrad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    drawCrosshair(x, y, spread) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 235, 190, 0.40)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(x, y, spread, 0, Math.PI*2);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(255, 245, 220, 0.95)';
+      ctx.lineWidth = 1;
+      const size = 10;
+      ctx.beginPath();
+      ctx.moveTo(x - size, y); ctx.lineTo(x - 2, y);
+      ctx.moveTo(x + 2, y);   ctx.lineTo(x + size, y);
+      ctx.moveTo(x, y - size);ctx.lineTo(x, y - 2);
+      ctx.moveTo(x, y + 2);   ctx.lineTo(x, y + size);
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(255, 220, 140, 0.85)';
+      ctx.fillRect(x - 1, y - 1, 2, 2);
+      ctx.restore();
+    }
+
+    drawObstacle(o) {
+      const sx = o.x - this.camera.x;
+      const sy = o.y - this.camera.y;
+
+      // shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.15)';
+      ctx.beginPath();
+      ctx.ellipse(sx, sy + 10, o.r * 0.9, o.r * 0.35, 0, 0, Math.PI*2);
+      ctx.fill();
+
+      if (o.kind === 'tree' && spriteOk('trees1-Sheet.png')) {
+        const cfg = getCfg('trees1-Sheet.png', 64, 80);
+        const s = o.scale;
+
+        ctx.save();
+        ctx.globalAlpha = 0.95;
+        ctx.drawImage(
+          sprites['trees1-Sheet.png'],
+          (o.type % cfg.frames) * cfg.fw, 0,
+          cfg.fw, cfg.fh,
+          sx - (cfg.fw * s) / 2,
+          sy - (cfg.fh * s) + 20,
+          cfg.fw * s, cfg.fh * s
+        );
+        ctx.restore();
+        return;
+      }
+
+      // cactus fallback
+      ctx.fillStyle = '#5a7a4a';
+      ctx.fillRect(sx - 3, sy - 18, 6, 18);
+      ctx.fillRect(sx - 10, sy - 13, 7, 4);
+      ctx.fillRect(sx - 10, sy - 13, 4, -8);
+      ctx.fillRect(sx + 3, sy - 10, 7, 4);
+      ctx.fillRect(sx + 7, sy - 10, 4, -6);
+
+      ctx.fillStyle = 'rgba(255,255,255,0.15)';
+      ctx.fillRect(sx - 1, sy - 18, 2, 18);
+    }
+
+    drawPlayer() {
+      const px = this.player.x - this.camera.x;
+      const py = this.player.y - this.camera.y;
+      const scale = 3;
+
+      // shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.15)';
+      ctx.beginPath();
+      ctx.ellipse(px, py + 14, 16, 5, 0, 0, Math.PI*2);
+      ctx.fill();
+
+      const c = this.player.combat;
+
+      if (c.state !== 'holstered') {
+        if (c.state === 'holstering') {
+          drawSpriteFrame('cowboy1_draw-Sheet.png', c.frame, px, py, c.facing * scale, scale, 1);
+          return;
+        }
+
+        let name = 'cowboy1_draw-Sheet.png';
+        if (c.state === 'shooting') name = 'cowboy1_ONLYshooting(nodraw)-Sheet.png';
+
+        const cfg = getCfg(name);
+        let frame = 0;
+        if (c.state === 'aiming') frame = getCfg('cowboy1_draw-Sheet.png').frames - 1;
+        else frame = clamp(c.frame, 0, cfg.frames - 1);
+
+        drawSpriteFrame(name, frame, px, py, c.facing * scale, scale, 1);
+        return;
+      }
+
+      const walkName = 'cowboy1_walk.png';
+      const standName = 'cowboy1_rotate_all_standing.png';
+
+      const moving = this.isMoving;
+
+      if (moving && spriteOk(walkName)) {
+        const cfg = getCfg(walkName);
+        const fps = 10;
+        const frame = Math.floor(this.player.walkT * fps) % Math.max(1, cfg.frames);
+
+        // flip on x axis only for walking
+        drawSpriteFrame(walkName, frame, px, py, this.player.facingX * scale, scale, 1);
+        return;
+      }
+
+      if (spriteOk(standName)) {
+        const cfg = getCfg(standName);
+        const frame = clamp(this.player.dir, 0, cfg.frames - 1);
+        drawSpriteFrame(standName, frame, px, py, scale, scale, 1);
+        return;
+      }
+
+      drawSpriteFrame('cowboy1_draw-Sheet.png', getCfg('cowboy1_draw-Sheet.png').frames - 1, px, py, scale, scale, 1);
+    }
+  }
+
+  // =========================================================
+  // Scene: DUCK HUNT (more "real" mechanics)
+  // =========================================================
+  class DuckHuntScene {
+    constructor() {
+      this.time = 0;
+
+      // gun feel
+      this.aiming = false;
+      this.aimStartAt = null;
+      this.aimSeed1 = Math.random() * 10;
+      this.aimSeed2 = Math.random() * 10;
+
+      this.recoil = 0;
+      this.flashAlpha = 0;
+      this.tracer = null; // {t, x1,y1,x2,y2}
+
+      // scoring
+      this.round = 1;
+      this.hits = 0;
+      this.misses = 0;
+      this.escapes = 0;
+      this.streak = 0;
+      this.bestStreak = 0;
+
+      // ammo (classic-ish)
+      this.magSize = 3;
+      this.shells = this.magSize;
+      this.reloadT = 0;
+
+      // ducks
+      this.ducks = [];
+      this.pendingSpawns = 0;
+      this.spawnGapT = 0;
+
+      // tuning
+      this.hitRadius = 18;
+      this.waveEscapeMin = 2.2;
+      this.waveEscapeMax = 4.0;
+
+      this.speedMin = 80;
+      this.speedMax = 165;
+
+      // background tint fallback
+      this.sky = null;
+    }
+
+    onEnter() { this.reset(); }
+    onExit() {}
+
+    newMatch() { this.reset(); }
+    reset() {
+      this.time = 0;
+
+      this.aiming = false;
+      this.aimStartAt = null;
+      this.recoil = 0;
+      this.flashAlpha = 0;
+      this.tracer = null;
+
+      this.round = 1;
+      this.hits = 0;
+      this.misses = 0;
+      this.escapes = 0;
+      this.streak = 0;
+      this.bestStreak = 0;
+
+      this.shells = this.magSize;
+      this.reloadT = 0;
+
+      this.ducks.length = 0;
+      this.pendingSpawns = 0;
+      this.spawnGapT = 0;
+
+      hideMessage();
+      this.startWave();
+    }
+
+    startWave() {
+      // 1–2 ducks per wave (feels more like Duck Hunt)
+      this.pendingSpawns = (Math.random() < 0.45) ? 1 : 2;
+      this.spawnGapT = 0;
+    }
+
+    onHolsterToggle() {
+      // cancel aim, no shot
+      this.aiming = false;
+      this.aimStartAt = null;
+    }
+
+    onDrawPress() {
+      if (this.reloadT > 0) return;
+      this.aiming = true;
+      this.aimStartAt = this.time;
+      this.aimSeed1 = Math.random() * 10;
+      this.aimSeed2 = Math.random() * 10;
+    }
+
+    onDrawRelease() {
+      if (Input.suppressNextRelease) {
+        Input.suppressNextRelease = false;
+        return;
+      }
+
+      if (!this.aiming) return;
+
+      // always end aim on release (keeps metaphor consistent)
+      this.aiming = false;
+
+      if (this.reloadT > 0 || this.shells <= 0) {
+        // empty click
+        this.aimStartAt = null;
+        this.streak = 0;
+        return;
+      }
+
+      this.shells--;
+      const now = this.time;
+
+      const shot = this.getShotPoint(now);
+
+      // tracer from "barrel" to shot
+      const muzzle = this.getMuzzleScreen();
+      this.tracer = { t: 0.07, x1: muzzle.x, y1: muzzle.y, x2: shot.x, y2: shot.y };
+
+      // resolve hit (hitscan)
+      const hitIdx = this.findDuckHit(shot.x, shot.y);
+      if (hitIdx >= 0) {
+        const d = this.ducks[hitIdx];
+        if (d.state === 'fly' || d.state === 'turn') {
+          d.state = 'hit';
+          d.hitT = 0;
+          d.vx *= 0.3;
+          d.vy = 40;
+          this.hits++;
+          this.streak++;
+          this.bestStreak = Math.max(this.bestStreak, this.streak);
+        }
+      } else {
+        this.misses++;
+        this.streak = 0;
+      }
+
+      // recoil + flash
+      this.recoil = 1.0;
+      this.flashAlpha = 0.22;
+
+      // reload behavior
+      if (this.shells <= 0) {
+        this.reloadT = 0.95;
+      }
+
+      this.aimStartAt = null;
+    }
+
+    getCrosshair(now) {
+      const baseX = Input.pointer.x;
+      const baseY = Input.pointer.y;
+
+      // A little slower stabilization here feels more “duck hunt”
+      const spread = AimModel.spread(now, this.aimStartAt);
+      const c = AimModel.crosshairCenter(now, baseX, baseY, spread, this.aimSeed1, this.aimSeed2);
+      return { x: c.x, y: c.y, spread };
+    }
+
+    getShotPoint(now) {
+      const aim = this.getCrosshair(now);
+      const off = randomInDisc(aim.spread);
+      return { x: aim.x + off.x, y: aim.y + off.y * 0.7 };
+    }
+
+    findDuckHit(x, y) {
+      for (let i = 0; i < this.ducks.length; i++) {
+        const d = this.ducks[i];
+        if (d.state === 'gone') continue;
+        if (d.state === 'escape') continue;
+        const dx = x - d.x;
+        const dy = y - d.y;
+        if (Math.hypot(dx, dy) <= this.hitRadius) return i;
+      }
+      return -1;
+    }
+
+    spawnDuck() {
+      const fromLeft = Math.random() < 0.5;
+
+      const x = fromLeft ? -40 : (canvas.width + 40);
+      const y = rand(110, 260);
+
+      const speed = rand(this.speedMin, this.speedMax) + Math.min(this.round * 6, 70);
+      const angle = fromLeft ? rand(-0.25, 0.25) : Math.PI + rand(-0.25, 0.25);
+
+      const vx = Math.cos(angle) * speed;
+      const vy = Math.sin(angle) * speed * 0.65;
+
+      this.ducks.push({
+        x, y,
+        vx, vy,
+        speed,
+        facing: (vx >= 0) ? 1 : -1,
+
+        // steering
+        turnT: rand(0.20, 0.70),
+        targetAngle: angle,
+        turnAnim: 0, // uses rotate sheet briefly on direction change
+
+        // lifespan
+        age: 0,
+        escapeAfter: rand(this.waveEscapeMin, this.waveEscapeMax),
+
+        // animation
+        frame: 0,
+        frameT: 0,
+
+        // hit/fall
+        state: 'fly', // fly | turn | hit | fall | escape | gone
+        hitT: 0
+      });
+    }
+
+    updateDuckSteering(d, dt) {
+      d.turnT -= dt;
+      if (d.turnT <= 0) {
+        d.turnT = rand(0.18, 0.75);
+
+        // pick a new target angle that tends to stay on-screen
+        const margin = 70;
+        let biasX = 0;
+        let biasY = 0;
+        if (d.x < margin) biasX += 0.9;
+        if (d.x > canvas.width - margin) biasX -= 0.9;
+        if (d.y < 90) biasY += 0.65;
+        if (d.y > 280) biasY -= 0.65;
+
+        // base random turn
+        const turn = rand(-0.9, 0.9);
+
+        // combine into a new direction
+        const curAng = Math.atan2(d.vy, d.vx);
+        let nextAng = curAng + turn * 0.55;
+        nextAng += biasX * 0.40;
+        nextAng += biasY * 0.25;
+
+        // clamp to avoid straight-down nonsense
+        nextAng = clamp(nextAng, -2.6, 2.6);
+
+        d.targetAngle = nextAng;
+      }
+
+      // steer toward targetAngle
+      const tx = Math.cos(d.targetAngle) * d.speed;
+      const ty = Math.sin(d.targetAngle) * d.speed * 0.65;
+
+      const steer = 3.2; // responsiveness
+      const oldFacing = d.facing;
+
+      d.vx = lerp(d.vx, tx, clamp(dt * steer, 0, 1));
+      d.vy = lerp(d.vy, ty, clamp(dt * steer, 0, 1));
+
+      d.facing = (d.vx >= 0) ? 1 : -1;
+
+      // if direction flips, play turn animation
+      if (d.facing !== oldFacing) {
+        d.turnAnim = 0.22;
+        d.state = 'turn';
+      }
+    }
+
+    update(dt) {
+      this.time += dt;
+
+      // reload
+      if (this.reloadT > 0) {
+        this.reloadT -= dt;
+        if (this.reloadT <= 0) {
+          this.reloadT = 0;
+          this.shells = this.magSize;
+        }
+      }
+
+      // spawn logic: only spawn new wave when no ducks remain
+      if (this.ducks.length === 0 && this.pendingSpawns === 0) {
+        this.round++;
+        this.startWave();
+      }
+
+      // spawn queued ducks
+      if (this.pendingSpawns > 0) {
+        this.spawnGapT -= dt;
+        if (this.spawnGapT <= 0) {
+          this.spawnDuck();
+          this.pendingSpawns--;
+          this.spawnGapT = 0.35;
+        }
+      }
+
+      const flyCfg = getCfg('duck1_fly-Sheet.png');
+      const rotCfg = getCfg('duck1_rotate-Sheet.png');
+      const shotCfg = getCfg('duck1shot-Sheet.png');
+
+      for (const d of this.ducks) {
+        if (d.state === 'gone') continue;
+
+        d.age += dt;
+        d.frameT += dt;
+
+        // escape if time runs out
+        if ((d.state === 'fly' || d.state === 'turn') && d.age > d.escapeAfter) {
+          d.state = 'escape';
+          d.vy = -240;
+          d.vx *= 0.35;
+          this.escapes++;
+          this.streak = 0;
+        }
+
+        if (d.state === 'fly' || d.state === 'turn') {
+          // animation
+          if (d.frameT > 0.08) {
+            d.frameT = 0;
+            d.frame = (d.frame + 1) % Math.max(1, flyCfg.frames);
+          }
+
+          // steering updates
+          this.updateDuckSteering(d, dt);
+
+          // motion
+          d.x += d.vx * dt;
+          d.y += d.vy * dt;
+
+          // keep inside bounds by soft bounce
+          const pad = 30;
+          if (d.x < -60) d.x = -60;
+          if (d.x > canvas.width + 60) d.x = canvas.width + 60;
+          if (d.y < 70) d.y = 70;
+          if (d.y > 320) d.y = 320;
+
+          // turn anim decays
+          if (d.turnAnim > 0) {
+            d.turnAnim -= dt;
+            if (d.turnAnim <= 0 && d.state === 'turn') d.state = 'fly';
+          }
+        }
+
+        if (d.state === 'hit') {
+          d.hitT += dt;
+
+          if (d.frameT > 0.08) {
+            d.frameT = 0;
+            d.frame = (d.frame + 1) % Math.max(1, shotCfg.frames);
+          }
+
+          d.x += d.vx * dt;
+          d.y += d.vy * dt;
+          d.vy += 180 * dt;
+
+          if (d.hitT > 0.18) d.state = 'fall';
+        }
+
+        if (d.state === 'fall') {
+          if (d.frameT > 0.08) {
+            d.frameT = 0;
+            d.frame = (d.frame + 1) % Math.max(1, rotCfg.frames);
+          }
+
+          d.x += d.vx * dt;
+          d.y += d.vy * dt;
+          d.vy += 260 * dt;
+
+          if (d.y > canvas.height + 60) d.state = 'gone';
+        }
+
+        if (d.state === 'escape') {
+          // fly up and out
+          if (d.frameT > 0.08) {
+            d.frameT = 0;
+            d.frame = (d.frame + 1) % Math.max(1, flyCfg.frames);
+          }
+
+          d.x += d.vx * dt;
+          d.y += d.vy * dt;
+          if (d.y < -60) d.state = 'gone';
+        }
+      }
+
+      // cleanup
+      for (let i = this.ducks.length - 1; i >= 0; i--) {
+        if (this.ducks[i].state === 'gone') this.ducks.splice(i, 1);
+      }
+
+      // fx
+      if (this.recoil > 0) this.recoil = Math.max(0, this.recoil - dt * 6.0);
+      if (this.flashAlpha > 0) this.flashAlpha = Math.max(0, this.flashAlpha - dt * 2.2);
+      if (this.tracer) {
+        this.tracer.t -= dt;
+        if (this.tracer.t <= 0) this.tracer = null;
+      }
+
+      this.updateUI();
+    }
+
+    updateUI() {
+      statusEl.textContent = 'Duck Hunt';
+      roundEl.textContent = `Round ${this.round} • Hits ${this.hits} • Miss ${this.misses} • Esc ${this.escapes}`;
+      const shells = '●'.repeat(this.shells) + '○'.repeat(this.magSize - this.shells);
+
+      if (this.reloadT > 0) {
+        subStatusEl.textContent = `Reloading… ${shells}`;
+        return;
+      }
+
+      if (this.aiming) {
+        const aim = this.getCrosshair(this.time);
+        const chance = AimModel.approxHitChance(this.hitRadius, aim.spread);
+        subStatusEl.textContent = Flags.debug
+          ? `Spread ${aim.spread.toFixed(1)}px • ~Center hit ${Math.round(chance*100)}% • Shells ${shells} • Q cancel`
+          : `Shells ${shells} • Release to shoot • Q cancel`;
+      } else {
+        subStatusEl.textContent = `Shells ${shells} • Hold to steady, release to shoot.`;
+      }
+    }
+
+    getMuzzleScreen() {
+      // “barrel” origin for tracer/flash
+      return { x: canvas.width/2, y: canvas.height - 62 };
+    }
+
+    drawFirstPersonGunOverlay() {
+      // very simple barrel + sight so it reads as “first person”
+      const bob = Math.sin(this.time * 6.0) * 1.2;
+      const recoilY = this.recoil * 10;
+
+      const baseX = canvas.width/2;
+      const baseY = canvas.height - 40 + bob + recoilY;
+
+      // barrel
+      ctx.save();
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = 'rgba(20,20,20,0.85)';
+      ctx.beginPath();
+      ctx.roundRect(baseX - 26, baseY - 70, 52, 90, 8);
+      ctx.fill();
+
+      // top highlight
+      ctx.globalAlpha = 0.25;
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.fillRect(baseX - 18, baseY - 66, 6, 80);
+
+      // front sight
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = 'rgba(30,30,30,0.9)';
+      ctx.fillRect(baseX - 3, baseY - 88, 6, 18);
+
+      ctx.restore();
+
+      // muzzle flash
+      if (this.flashAlpha > 0) {
+        const m = this.getMuzzleScreen();
+        ctx.save();
+        ctx.globalAlpha = this.flashAlpha;
+        ctx.fillStyle = 'rgba(255, 240, 200, 0.9)';
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, 18, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    drawReticle() {
+      const now = this.time;
+      const aim = this.getCrosshair(now);
+
+      // Always show a reticle so it’s clear you’re targeting
+      const x = aim.x;
+      const y = aim.y;
+
+      // When aiming, also show spread ring
+      if (this.aiming) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 235, 190, 0.45)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(x, y, aim.spread, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 245, 220, 0.95)';
+      ctx.lineWidth = 1;
+      const size = 10;
+      ctx.beginPath();
+      ctx.moveTo(x - size, y); ctx.lineTo(x - 2, y);
+      ctx.moveTo(x + 2, y);   ctx.lineTo(x + size, y);
+      ctx.moveTo(x, y - size);ctx.lineTo(x, y - 2);
+      ctx.moveTo(x, y + 2);   ctx.lineTo(x, y + size);
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(255, 220, 140, 0.85)';
+      ctx.fillRect(x - 1, y - 1, 2, 2);
+      ctx.restore();
+    }
+
+    draw() {
+      ctx.save();
+
+      // background
+      if (spriteOk('bestbackground_west1.png')) {
+        const img = sprites['bestbackground_west1.png'];
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      } else {
+        const sky = ctx.createLinearGradient(0,0,0,canvas.height);
+        sky.addColorStop(0, '#6fb6d9');
+        sky.addColorStop(0.55, '#cfe9f5');
+        sky.addColorStop(0.56, '#caa56e');
+        sky.addColorStop(1, '#b89056');
+        ctx.fillStyle = sky;
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+      }
+
+      // ducks
+      for (const d of this.ducks) {
+        if (d.state === 'gone') continue;
+
+        let sprite = 'duck1_fly-Sheet.png';
+        if (d.state === 'hit') sprite = 'duck1shot-Sheet.png';
+        if (d.state === 'fall') sprite = spriteOk('duck1_rotate-Sheet.png') ? 'duck1_rotate-Sheet.png' : 'duck1shot-Sheet.png';
+        if (d.state === 'turn' && spriteOk('duck1_rotate-Sheet.png')) sprite = 'duck1_rotate-Sheet.png';
+
+        const cfg = getCfg(sprite);
+        const frame = clamp(d.frame, 0, cfg.frames - 1);
+
+        ctx.save();
+        ctx.translate(d.x, d.y);
+
+        // duck facing: flip on vx sign
+        ctx.scale(d.facing * 2.4, 2.4);
+        ctx.drawImage(
+          sprites[sprite],
+          frame * cfg.fw, 0,
+          cfg.fw, cfg.fh,
+          -cfg.fw/2, -cfg.fh/2,
+          cfg.fw, cfg.fh
+        );
+        ctx.restore();
+
+        if (Flags.debug) {
+          ctx.save();
+          ctx.globalAlpha = 0.22;
+          ctx.strokeStyle = 'rgba(255, 120, 120, 0.8)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(d.x, d.y, this.hitRadius, 0, Math.PI*2);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+
+      // tracer
+      if (this.tracer) {
+        ctx.save();
+        ctx.globalAlpha = 0.55;
+        ctx.strokeStyle = 'rgba(255, 245, 220, 0.9)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(this.tracer.x1, this.tracer.y1);
+        ctx.lineTo(this.tracer.x2, this.tracer.y2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // reticle
+      this.drawReticle();
+
+      // duck logo (optional)
+      if (spriteOk('ducklogo1.png')) {
+        const img = sprites['ducklogo1.png'];
+        ctx.save();
+        ctx.globalAlpha = 0.65;
+        ctx.drawImage(img, 10, 90, 90, 60);
+        ctx.restore();
+      }
+
+      // gun overlay
+      this.drawFirstPersonGunOverlay();
+
+      ctx.restore();
+
+      // vignette
+      const vignetteGrad = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 150, canvas.width/2, canvas.height/2, 420);
+      vignetteGrad.addColorStop(0, 'rgba(0,0,0,0)');
+      vignetteGrad.addColorStop(1, 'rgba(0,0,0,0.35)');
+      ctx.fillStyle = vignetteGrad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+  }
+
+  // =========================================================
+  // Main loop
+  // =========================================================
+  let lastPerf = performance.now();
+  function loop() {
+    const nowPerf = performance.now();
+    let dt = (nowPerf - lastPerf) / 1000;
+    dt = Math.min(dt, 0.05);
+    lastPerf = nowPerf;
+
+    SceneManager.current?.update?.(dt);
+    SceneManager.current?.draw?.();
+
+    requestAnimationFrame(loop);
+  }
+
+  // =========================================================
+  // Load assets and start
+  // =========================================================
+  let loaded = 0;
+  spriteList.forEach((name) => {
+    const img = new Image();
+    img.onload = () => { loaded++; if (loaded === spriteList.length) init(); };
+    img.onerror = () => { loaded++; if (loaded === spriteList.length) init(); };
+    img.src = name;
+    sprites[name] = img;
+  });
+
+  function init() {
+    SceneManager.add('duel', new DuelScene());
+    SceneManager.add('overworld', new OverworldScene());
+    SceneManager.add('duckhunt', new DuckHuntScene());
+
+    SceneManager.switchTo('duel');
+
+    updateToggleButtons();
+    updateInstructions();
+
+    requestAnimationFrame(loop);
+  }
+})();
+</script>
+</body>
+</html>
