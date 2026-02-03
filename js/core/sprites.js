@@ -13,6 +13,8 @@ const spriteConfigManual = {
   'cowboy2_shootOnly-Sheet.png': { fw: 32, fh: 32, frames: 13 },
   'cowboy2_death-Sheet.png': { fw: 32, fh: 32, frames: 9 },
 
+  'cowboy3_fire-Sheet.png': { fw: 32, fh: 64, frames: 24 },
+
   'trees1-Sheet.png': { fw: 64, fh: 80, frames: 15 },
 
   'duck1_fly-Sheet.png': { fw: 32, fh: 32, frames: 6 },

@@ -172,6 +172,7 @@ export class DuelScene {
         label: 'Outlaw',
         baseFacing: +1,
         shootFrameOffset: -1,
+        shootOffsetY: -16,
         draw: c3Draw,
         shoot: 'cowboy3_fire-Sheet.png',
         death: 'cowboy3_death-Sheet.png'
@@ -1241,7 +1242,8 @@ export class DuelScene {
     const desiredFacing = this.desiredFacingToward(this.enemy, this.player); // should be -1
     const sx = this.enemyScaleX(desiredFacing);
 
-    drawSpriteFrame(ctx, name, frame, this.enemy.x, this.enemy.y, sx * scale, scale, 1);
+    const yOffset = (this.enemy.state === 'shooting') ? (this.enemySkin.shootOffsetY ?? 0) : 0;
+    drawSpriteFrame(ctx, name, frame, this.enemy.x, this.enemy.y + yOffset, sx * scale, scale, 1);
   }
 
   generateEnvironment() {
