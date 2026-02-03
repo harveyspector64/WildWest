@@ -761,7 +761,7 @@ export class DuelScene {
       if (this.enemy.frameTime > 0.05) {
         this.enemy.frameTime = 0;
         this.enemy.frame++;
-        if (this.enemy.frame >= Math.min(5, cfg.frames)) {
+        if (this.enemy.frame >= cfg.frames) {
           this.enemy.state = 'aiming';
           this.enemy.frame = getCfg(drawSprite).frames - 1;
 
@@ -1219,7 +1219,7 @@ export class DuelScene {
     let frame = 0;
 
     if (this.enemy.state === 'aiming') frame = getCfg(this.enemySkin.draw).frames - 1;
-    else if (this.enemy.state === 'shooting') frame = clamp(this.enemy.frame, 0, Math.min(4, cfg.frames - 1));
+    else if (this.enemy.state === 'shooting') frame = clamp(this.enemy.frame, 0, cfg.frames - 1);
     else frame = clamp(this.enemy.frame, 0, cfg.frames - 1);
 
     const desiredFacing = this.desiredFacingToward(this.enemy, this.player); // should be -1

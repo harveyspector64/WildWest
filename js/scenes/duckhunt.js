@@ -17,6 +17,7 @@ export class DuckHuntScene {
     this.recoil = 0;
     this.flashAlpha = 0;
     this.tracer = null; // {t, x1,y1,x2,y2}
+    this.shotPulse = 0;
 
     // scoring
     this.round = 1;
@@ -60,6 +61,7 @@ export class DuckHuntScene {
     this.recoil = 0;
     this.flashAlpha = 0;
     this.tracer = null;
+    this.shotPulse = 0;
 
     this.round = 1;
     this.hits = 0;
@@ -147,6 +149,7 @@ export class DuckHuntScene {
     // recoil + flash
     this.recoil = 1.0;
     this.flashAlpha = 0.22;
+    this.shotPulse = 1.0;
 
     // reload behavior
     if (this.shells <= 0) {
@@ -397,6 +400,7 @@ export class DuckHuntScene {
       this.tracer.t -= dt;
       if (this.tracer.t <= 0) this.tracer = null;
     }
+    if (this.shotPulse > 0) this.shotPulse = Math.max(0, this.shotPulse - dt * 6.0);
 
     this.updateUI();
   }
@@ -501,6 +505,17 @@ export class DuckHuntScene {
     ctx.fillStyle = 'rgba(255, 220, 140, 0.85)';
     ctx.fillRect(x - 1, y - 1, 2, 2);
     ctx.restore();
+
+    if (this.shotPulse > 0) {
+      ctx.save();
+      ctx.globalAlpha = 0.6 * this.shotPulse;
+      ctx.strokeStyle = 'rgba(255, 220, 140, 0.9)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, 18 + (1 - this.shotPulse) * 16, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   draw() {
@@ -573,15 +588,6 @@ export class DuckHuntScene {
 
     // reticle
     this.drawReticle();
-
-    // duck logo (optional)
-    if (spriteOk('ducklogo1.png')) {
-      const img = sprites['ducklogo1.png'];
-      ctx.save();
-      ctx.globalAlpha = 0.65;
-      ctx.drawImage(img, 10, 90, 90, 60);
-      ctx.restore();
-    }
 
     // gun overlay
     this.drawFirstPersonGunOverlay();
