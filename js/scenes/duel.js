@@ -171,6 +171,7 @@ export class DuelScene {
         id: 'cowboy3',
         label: 'Outlaw',
         baseFacing: +1,
+        shootFrameOffset: -1,
         draw: c3Draw,
         shoot: 'cowboy3_fire-Sheet.png',
         death: 'cowboy3_death-Sheet.png'
@@ -293,6 +294,11 @@ export class DuelScene {
     this.enemy.ai.drawAt = this.round.goAt + reactionDelay;
     this.enemy.ai.fireAt = null;
     this.enemy.ai.plannedAimDelay = 0;
+  }
+
+  enemyShootFrameLimit(cfg) {
+    const offset = this.enemySkin?.shootFrameOffset ?? 0;
+    return Math.max(1, cfg.frames + offset);
   }
 
   // ---------------------------------------------------------
@@ -761,7 +767,8 @@ export class DuelScene {
       if (this.enemy.frameTime > 0.05) {
         this.enemy.frameTime = 0;
         this.enemy.frame++;
-        if (this.enemy.frame >= cfg.frames) {
+        const frameLimit = this.enemyShootFrameLimit(cfg);
+        if (this.enemy.frame >= frameLimit) {
           this.enemy.state = 'aiming';
           this.enemy.frame = getCfg(drawSprite).frames - 1;
 
@@ -796,8 +803,14 @@ export class DuelScene {
 
     if (this.enemy.state === 'aiming') {
       this.enemy.frame = getCfg(drawSprite).frames - 1;
-      if (Flags.enemyAI && !this.enemy.hasShot && this.enemy.ai.fireAt != null && now >= this.enemy.ai.fireAt && this.player.health > 0) {
-        this.fireEnemyShot(now);
+      if (Flags.enemyAI && !this.enemy.hasShot) {
+        if (this.enemy.ai.fireAt == null) {
+          const p = this.currentPersonality;
+          this.enemy.ai.fireAt = now + rand(p.aimMin, p.aimMax);
+        }
+        if (now >= this.enemy.ai.fireAt && this.player.health > 0) {
+          this.fireEnemyShot(now);
+        }
       }
       return;
     }
@@ -1219,7 +1232,10 @@ export class DuelScene {
     let frame = 0;
 
     if (this.enemy.state === 'aiming') frame = getCfg(this.enemySkin.draw).frames - 1;
-    else if (this.enemy.state === 'shooting') frame = clamp(this.enemy.frame, 0, cfg.frames - 1);
+    else if (this.enemy.state === 'shooting') {
+      const frameLimit = this.enemyShootFrameLimit(cfg);
+      frame = clamp(this.enemy.frame, 0, Math.min(frameLimit - 1, cfg.frames - 1));
+    }
     else frame = clamp(this.enemy.frame, 0, cfg.frames - 1);
 
     const desiredFacing = this.desiredFacingToward(this.enemy, this.player); // should be -1
