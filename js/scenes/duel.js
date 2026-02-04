@@ -172,7 +172,7 @@ export class DuelScene {
         label: 'Outlaw',
         baseFacing: +1,
         shootFrameOffset: -1,
-        shootOffsetY: -16,
+        shootOffsetY: 16,
         draw: c3Draw,
         shoot: 'cowboy3_fire-Sheet.png',
         death: 'cowboy3_death-Sheet.png'
@@ -229,10 +229,14 @@ export class DuelScene {
     this.round.time = 0;
     this.round.goTime = rand(this.GO_MIN, this.GO_MAX);
     this.round.goFired = false;
-    this.round.goAt = 0;
-    this.round.goBannerUntil = 0;
-    this.round.result = null;
-    this.round.reason = '';
+      this.round.goAt = 0;
+      this.round.goBannerUntil = 0;
+      this.round.result = null;
+      this.round.reason = '';
+      this.round.message = '';
+      this.round.messageShown = false;
+      this.round.messageAt = 0;
+      this.round.endedAt = 0;
 
     this.bullets.length = 0;
     this.blood.length = 0;
@@ -343,7 +347,7 @@ export class DuelScene {
 
     // False start
     if (!Flags.practice && !this.round.goFired && this.round.state === 'standoff') {
-      this.endRound('lost', 'FALSE START');
+      this.endRound('lost', 'FALSE START', now);
       return;
     }
 
@@ -422,13 +426,14 @@ export class DuelScene {
     if (Flags.enemyAI) this.scheduleEnemyFromGo(now);
   }
 
-  endRound(result, reason) {
+  endRound(result, reason, now = this.roundNowSeconds()) {
     if (Flags.practice) return;
     if (this.round.state === 'over') return;
 
     this.round.state = 'over';
     this.round.result = result;
     this.round.reason = reason;
+    this.round.endedAt = now;
 
     if (result === 'won') this.playerScore++;
     else if (result === 'lost') this.enemyScore++;
@@ -466,7 +471,17 @@ export class DuelScene {
       ? `<br><small>Press N for new match</small>`
       : `<br><small>Press R to continue • N for new match</small>`;
 
-    showMessage(`${headline}<br>${reasonLine}${statsBlock}${prompt}`);
+    const message = `${headline}<br>${reasonLine}${statsBlock}${prompt}`;
+    const delay = this.endScreenDelay();
+
+    this.round.message = message;
+    this.round.messageShown = false;
+    this.round.messageAt = now + delay;
+
+    if (delay <= 0) {
+      showMessage(message);
+      this.round.messageShown = true;
+    }
   }
 
   updateScoreUI() {
@@ -474,6 +489,25 @@ export class DuelScene {
     const t = this.matchTarget();
     firstToEl.textContent = (t === Infinity) ? 'Endless' : `First to ${t}`;
     btnMatch.textContent = `Match: ${matchLabel()}`;
+  }
+
+  endScreenDelay() {
+    const reason = this.round.reason || '';
+    if (reason.includes('FALSE START')) return 0.2;
+
+    let delay = 0;
+    if (this.player.health <= 0) {
+      delay = Math.max(delay, this.deathAnimDuration('cowboy1_die.png'));
+    }
+    if (this.enemy.health <= 0 && this.enemySkin?.death) {
+      delay = Math.max(delay, this.deathAnimDuration(this.enemySkin.death));
+    }
+    return delay + 0.2;
+  }
+
+  deathAnimDuration(spriteName) {
+    const cfg = getCfg(spriteName);
+    return cfg.frames * 0.1;
   }
 
   // --------------------
@@ -595,6 +629,7 @@ export class DuelScene {
     const aimFactor = clamp((aimDelay - p.aimMin) / aimSpan, 0, 1);
 
     let acc = clamp(p.accuracy + 0.10 * aimFactor, 0.10, 0.92);
+    if (this.enemy.health <= 0 || this.enemy.state === 'dead') acc *= 0.25;
     if (this.enemy.ai.flinched) acc = clamp(acc - 0.12, 0.10, 0.92);
 
     const willHit = Math.random() < acc;
@@ -640,6 +675,11 @@ export class DuelScene {
     if (!Flags.practice) this.evaluateRoundEnd(now);
 
     this.updateUI(now);
+
+    if (this.round.state === 'over' && this.round.message && !this.round.messageShown && now >= this.round.messageAt) {
+      showMessage(this.round.message);
+      this.round.messageShown = true;
+    }
   }
 
   updateStandoff(dt, now) {
@@ -655,7 +695,7 @@ export class DuelScene {
 
     const p = this.currentPersonality;
     if (p.falseStartChance > 0 && Math.random() < p.falseStartChance * dt) {
-      this.endRound('won', 'ENEMY FALSE START');
+        this.endRound('won', 'ENEMY FALSE START', now);
       return;
     }
 
@@ -930,18 +970,18 @@ export class DuelScene {
     const eDead = this.enemy.health <= 0;
 
     if (pDead || eDead) {
-      if (pDead && eDead) {
-        const dt = Math.abs((this.player.deadAt ?? now) - (this.enemy.deadAt ?? now));
-        if (dt <= this.TIE_EPS) this.endRound('draw', 'SIMULTANEOUS HIT');
-        else if ((this.player.deadAt ?? now) < (this.enemy.deadAt ?? now)) this.endRound('lost', 'YOU WENT DOWN FIRST');
-        else this.endRound('won', 'THEM WENT DOWN FIRST');
-      } else if (pDead) this.endRound('lost', 'SHOT');
-      else this.endRound('won', 'SHOT');
+        if (pDead && eDead) {
+          const dt = Math.abs((this.player.deadAt ?? now) - (this.enemy.deadAt ?? now));
+          if (dt <= this.TIE_EPS) this.endRound('draw', 'SIMULTANEOUS HIT', now);
+          else if ((this.player.deadAt ?? now) < (this.enemy.deadAt ?? now)) this.endRound('lost', 'YOU WENT DOWN FIRST', now);
+          else this.endRound('won', 'THEM WENT DOWN FIRST', now);
+        } else if (pDead) this.endRound('lost', 'SHOT', now);
+        else this.endRound('won', 'SHOT', now);
       return;
     }
 
     if (this.player.hasShot && this.enemy.hasShot && this.bullets.length === 0) {
-      this.endRound('draw', 'BOTH MISSED');
+        this.endRound('draw', 'BOTH MISSED', now);
     }
   }
 
